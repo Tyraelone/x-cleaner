@@ -58,4 +58,105 @@ describe("matchLocalRules", () => {
       reason: "matched antiIntellectual keyword",
     });
   });
+
+  it("matches built-in chinese hate keywords", () => {
+    const result = matchLocalRules("这种人都该滚回你的国家去", defaultSettings);
+
+    expect(result).toMatchObject({
+      category: "hate",
+      matchedText: "滚回你的国家",
+      reason: "matched hate keyword",
+    });
+  });
+
+  it("matches built-in english phrases when punctuation is used to evade simple matching", () => {
+    const result = matchLocalRules("what a brain...dead take", defaultSettings);
+
+    expect(result).toMatchObject({
+      category: "harassment",
+      matchedText: "brain dead",
+      reason: "matched antiIntellectual keyword",
+    });
+  });
+
+  it("matches custom chinese keywords even when whitespace is inserted", () => {
+    const settings = {
+      ...defaultSettings,
+      customKeywords: ["低智言论"],
+    };
+
+    const result = matchLocalRules("这就是低 智 言论", settings);
+
+    expect(result).toMatchObject({
+      category: "harassment",
+      matchedText: "低智言论",
+      reason: "matched custom keyword",
+    });
+  });
+
+  it("matches chinese anti-intellectual phrases beyond the initial seed list", () => {
+    const result = matchLocalRules("你真是读书读傻了", defaultSettings);
+
+    expect(result).toMatchObject({
+      category: "harassment",
+      matchedText: "读书读傻了",
+      reason: "matched antiIntellectual keyword",
+    });
+  });
+
+  it("matches english anti-intellectual slang", () => {
+    const result = matchLocalRules("only a smooth brain would post this", defaultSettings);
+
+    expect(result).toMatchObject({
+      category: "harassment",
+      matchedText: "smooth brain",
+      reason: "matched antiIntellectual keyword",
+    });
+  });
+
+  it("matches chinese harassment profanity", () => {
+    const result = matchLocalRules("你这个狗东西别说话", defaultSettings);
+
+    expect(result).toMatchObject({
+      category: "harassment",
+      matchedText: "狗东西",
+      reason: "matched harassment keyword",
+    });
+  });
+
+  it("matches english harassment insults", () => {
+    const result = matchLocalRules("you are a piece of trash", defaultSettings);
+
+    expect(result).toMatchObject({
+      category: "harassment",
+      matchedText: "piece of trash",
+      reason: "matched harassment keyword",
+    });
+  });
+
+  it("matches chinese exclusion language", () => {
+    const result = matchLocalRules("这些人都给我滚出去", defaultSettings);
+
+    expect(result).toMatchObject({
+      category: "hate",
+      matchedText: "滚出去",
+      reason: "matched hate keyword",
+    });
+  });
+
+  it("matches english exclusion language", () => {
+    const result = matchLocalRules("we should send them back", defaultSettings);
+
+    expect(result).toMatchObject({
+      category: "hate",
+      matchedText: "send them back",
+      reason: "matched hate keyword",
+    });
+  });
+
+  it("does not match neutral discussion about learning", () => {
+    const result = matchLocalRules("this academic paper is hard to read", defaultSettings);
+
+    expect(result).toBeNull();
+  });
 });

@@ -99,4 +99,4 @@ npm run build
 
 ## Status
 
-`v0.1.0` is a working first release focused on local filtering, reversible collapse behavior, and optional AI enhancement without requiring a hosted backend.
+`v0.1.1` adds broader multilingual local-rule coverage for Chinese and English abuse patterns while keeping the first-release extension behavior and packaging flow intact.
