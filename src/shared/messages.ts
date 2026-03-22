@@ -7,7 +7,7 @@ export const RAW_AI_CLASSIFICATION_RESULT = "raw-ai-classification-result";
 export interface AiClassificationRequestPayload {
   requestId: string;
   candidate: CandidateContent;
-  settings: Settings;
+  settings?: Settings;
 }
 
 export type RawAiClassificationResponsePayload = RawAiClassificationResult & {
@@ -23,3 +23,7 @@ export interface RawAiClassificationResultMessage {
   type: typeof RAW_AI_CLASSIFICATION_RESULT;
   payload: RawAiClassificationResponsePayload;
 }
+
+export type AiClassificationMessage =
+  | AiClassificationRequestMessage
+  | RawAiClassificationResultMessage;
