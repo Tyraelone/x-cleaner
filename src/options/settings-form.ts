@@ -13,6 +13,10 @@ export interface SettingsFormHandlers {
   onSave: (payload: SettingsFormSubmitPayload) => void | Promise<void>;
 }
 
+interface SettingsSnapshot extends Settings {
+  apiKey: string;
+}
+
 const categoryLabels: Record<FilterCategory, string> = {
   hate: "Hate",
   harassment: "Harassment",
@@ -94,12 +98,33 @@ function renderCheckboxRow(
   return { wrapper, input };
 }
 
+function cloneSnapshot(snapshot: SettingsSnapshot): SettingsSnapshot {
+  return {
+    ai: {
+      ...snapshot.ai,
+    },
+    confidenceThreshold: snapshot.confidenceThreshold,
+    categories: {
+      ...snapshot.categories,
+    },
+    allowlist: [...snapshot.allowlist],
+    blacklist: [...snapshot.blacklist],
+    customKeywords: [...snapshot.customKeywords],
+    apiKey: snapshot.apiKey,
+  };
+}
+
 export function renderSettingsForm(
   container: HTMLElement,
   initialSettings: SettingsFormState,
   handlers: SettingsFormHandlers,
 ): HTMLFormElement {
   container.replaceChildren();
+
+  let savedSnapshot = cloneSnapshot({
+    ...initialSettings,
+    apiKey: initialSettings.apiKey ?? "",
+  });
 
   const form = document.createElement("form");
   form.className = "settings-form";
@@ -133,7 +158,7 @@ export function renderSettingsForm(
   );
 
   const aiSection = createSection("AI settings");
-  const aiEnabledInput = createCheckbox("ai-enabled", initialSettings.ai.enabled);
+  const aiEnabledInput = createCheckbox("ai-enabled", savedSnapshot.ai.enabled);
   const aiEnabledRow = document.createElement("label");
   aiEnabledRow.className = "checkbox-row";
   aiEnabledRow.setAttribute("for", "ai-enabled");
@@ -147,10 +172,10 @@ export function renderSettingsForm(
     option.textContent = provider === "openai" ? "OpenAI" : "Mock";
     providerSelect.append(option);
   }
-  providerSelect.value = initialSettings.ai.provider ?? "openai";
+  providerSelect.value = savedSnapshot.ai.provider ?? "openai";
 
-  const modelInput = createTextInput("ai-model", initialSettings.ai.model ?? "");
-  const apiKeyInput = createTextInput("api-key", initialSettings.apiKey ?? "", "password");
+  const modelInput = createTextInput("ai-model", savedSnapshot.ai.model ?? "");
+  const apiKeyInput = createTextInput("api-key", savedSnapshot.apiKey, "password");
 
   aiSection.append(
     aiEnabledRow,
@@ -172,22 +197,22 @@ export function renderSettingsForm(
 
   actions.append(saveButton, resetButton);
 
-  function syncInitialValues(): void {
+  function applySnapshot(snapshot: SettingsSnapshot): void {
     for (const [category, input] of categoryCheckboxes) {
-      input.checked = initialSettings.categories[category];
+      input.checked = snapshot.categories[category];
     }
 
-    allowlistInput.value = joinLines(initialSettings.allowlist);
-    blacklistInput.value = joinLines(initialSettings.blacklist);
-    customKeywordsInput.value = joinLines(initialSettings.customKeywords);
-    aiEnabledInput.checked = initialSettings.ai.enabled;
-    providerSelect.value = initialSettings.ai.provider ?? "openai";
-    modelInput.value = initialSettings.ai.model ?? "";
-    apiKeyInput.value = initialSettings.apiKey ?? "";
+    allowlistInput.value = joinLines(snapshot.allowlist);
+    blacklistInput.value = joinLines(snapshot.blacklist);
+    customKeywordsInput.value = joinLines(snapshot.customKeywords);
+    aiEnabledInput.checked = snapshot.ai.enabled;
+    providerSelect.value = snapshot.ai.provider ?? "openai";
+    modelInput.value = snapshot.ai.model ?? "";
+    apiKeyInput.value = snapshot.apiKey;
   }
 
   resetButton.addEventListener("click", () => {
-    syncInitialValues();
+    applySnapshot(savedSnapshot);
   });
 
   form.addEventListener("submit", async (event) => {
@@ -213,11 +238,17 @@ export function renderSettingsForm(
       blacklist: splitLines(blacklistInput.value),
       customKeywords: splitLines(customKeywordsInput.value),
     };
+    const nextSnapshot = cloneSnapshot({
+      ...settings,
+      apiKey: apiKeyInput.value,
+    });
 
     await handlers.onSave({
       settings,
       apiKey: apiKeyInput.value,
     });
+
+    savedSnapshot = nextSnapshot;
   });
 
   form.append(categorySection, keywordSection, aiSection, actions);

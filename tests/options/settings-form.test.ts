@@ -75,4 +75,24 @@ describe("renderSettingsForm", () => {
       apiKey: "secret-key",
     });
   });
+
+  it("resets to the latest saved values after a successful save", async () => {
+    document.body.innerHTML = '<div id="app"></div>';
+    const onSave = vi.fn().mockResolvedValue(undefined);
+
+    const form = renderSettingsForm(document.getElementById("app")!, createDefaultSettings(), {
+      onSave,
+    });
+
+    fireEvent.click(getByLabelText(document.body, "Hate"));
+    fireEvent.click(getByRole(document.body, "button", { name: "Save settings" }));
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    fireEvent.click(getByLabelText(document.body, "Hate"));
+    fireEvent.click(getByRole(document.body, "button", { name: "Reset" }));
+
+    expect((getByLabelText(document.body, "Hate") as HTMLInputElement).checked).toBe(false);
+    expect(form).toBeTruthy();
+  });
 });
