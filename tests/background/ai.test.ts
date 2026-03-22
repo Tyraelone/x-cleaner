@@ -415,4 +415,74 @@ describe("background listener", () => {
     expect(getSettingsMock).toHaveBeenCalledTimes(1);
     expect(getApiKeyMock).toHaveBeenCalledTimes(1);
   });
+
+  it("treats an omitted provider like openai and still short-circuits without an api key", async () => {
+    const classifyWithProviderMock = vi.fn();
+    const getSettingsMock = vi.fn().mockResolvedValue({
+      ...defaultSettings,
+      ai: {
+        enabled: true,
+        model: "gpt-4o-mini",
+      },
+    });
+    const getApiKeyMock = vi.fn().mockResolvedValue(null);
+
+    let registeredListener:
+      | ((message: unknown, sender: unknown, sendResponse: (response: unknown) => void) => boolean | void)
+      | undefined;
+
+    vi.stubGlobal("chrome", {
+      runtime: {
+        onMessage: {
+          addListener: (listener: typeof registeredListener) => {
+            registeredListener = listener;
+          },
+        },
+      },
+    });
+
+    vi.doMock("../../src/background/ai", () => ({
+      classifyWithProvider: classifyWithProviderMock,
+    }));
+    vi.doMock("../../src/shared/storage", () => ({
+      getSettings: getSettingsMock,
+      getApiKey: getApiKeyMock,
+    }));
+
+    await import("../../src/background/index");
+
+    const sendResponse = vi.fn();
+    const keepAlive = registeredListener?.(
+      {
+        type: REQUEST_AI_CLASSIFICATION,
+        payload: {
+          requestId: "request-3",
+          candidate: {
+            id: "candidate-3",
+            type: "post",
+            text: "this text should not be sent without a key",
+          },
+        },
+      },
+      {},
+      sendResponse,
+    );
+
+    expect(keepAlive).toBe(true);
+
+    await vi.waitFor(() =>
+      expect(sendResponse).toHaveBeenCalledWith({
+        type: RAW_AI_CLASSIFICATION_RESULT,
+        payload: {
+          requestId: "request-3",
+          blocked: false,
+          confidence: 0,
+          matches: [],
+        },
+      }),
+    );
+    expect(classifyWithProviderMock).not.toHaveBeenCalled();
+    expect(getSettingsMock).toHaveBeenCalledTimes(1);
+    expect(getApiKeyMock).toHaveBeenCalledTimes(1);
+  });
 });
