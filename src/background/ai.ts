@@ -1,5 +1,5 @@
 import type { RawAiClassificationResult } from "../shared/classifier";
-import type { AiConfig, FilterCategory, RuleMatch } from "../shared/types";
+import type { AiConfig, AiProvider, FilterCategory, RuleMatch } from "../shared/types";
 
 const filterCategories = [
   "hate",
@@ -10,6 +10,20 @@ const filterCategories = [
 ] as const satisfies readonly FilterCategory[];
 
 type FetchLike = typeof fetch;
+
+type StructuredClassificationRequest = {
+  model: string;
+  input: Array<{
+    role: "system" | "user";
+    content: Array<{
+      type: "input_text";
+      text: string;
+    }>;
+  }>;
+  response_format: {
+    type: "json_object";
+  };
+};
 
 function createAllowResult(confidence = 0): RawAiClassificationResult {
   return {
@@ -59,17 +73,6 @@ function normalizeMatches(value: unknown): RuleMatch[] {
   return value.filter(isRuleMatch);
 }
 
-function isAllowLabel(label: string): boolean {
-  return [
-    "allow",
-    "allowed",
-    "safe",
-    "non-blocking",
-    "nonblocking",
-    "neutral",
-  ].includes(label);
-}
-
 function normalizeProviderOutput(value: unknown): RawAiClassificationResult | null {
   if (!isRecord(value)) {
     return null;
@@ -105,7 +108,16 @@ function normalizeProviderOutput(value: unknown): RawAiClassificationResult | nu
   }
 
   if (typeof value.label === "string") {
-    if (isAllowLabel(value.label)) {
+    if (
+      [
+        "allow",
+        "allowed",
+        "safe",
+        "non-blocking",
+        "nonblocking",
+        "neutral",
+      ].includes(value.label)
+    ) {
       return createAllowResult(confidence);
     }
 
@@ -122,21 +134,19 @@ function normalizeProviderOutput(value: unknown): RawAiClassificationResult | nu
   return null;
 }
 
-function buildMockProviderResponse(text: string): unknown {
+function buildMockProviderResponse(text: string): RawAiClassificationResult {
   const normalizedText = text.toLowerCase();
   const spamKeyword = ["follow me", "buy now", "free money", "subscribe"].find((keyword) =>
     normalizedText.includes(keyword),
   );
 
   if (!spamKeyword) {
-    return {
-      label: "allow",
-      confidence: 0.5,
-    };
+    return createAllowResult(0.5);
   }
 
   return {
-    label: "spam",
+    blocked: true,
+    category: "spam",
     confidence: 0.99,
     matches: [
       {
@@ -152,6 +162,32 @@ function extractStructuredProviderOutput(value: unknown): unknown {
     return value;
   }
 
+  const rawOutput = value.output;
+
+  if (isRecord(rawOutput)) {
+    return {
+      ...rawOutput,
+      ...(typeof value.confidence === "number" ? { confidence: value.confidence } : {}),
+    };
+  }
+
+  if (typeof rawOutput === "string") {
+    try {
+      const parsedOutput = JSON.parse(rawOutput) as unknown;
+
+      if (isRecord(parsedOutput)) {
+        return {
+          ...parsedOutput,
+          ...(typeof value.confidence === "number" ? { confidence: value.confidence } : {}),
+        };
+      }
+
+      return parsedOutput;
+    } catch {
+      return rawOutput;
+    }
+  }
+
   if (
     "blocked" in value ||
     "label" in value ||
@@ -161,35 +197,39 @@ function extractStructuredProviderOutput(value: unknown): unknown {
     return value;
   }
 
-  const rawOutput = value.output;
-
-  if (isRecord(rawOutput)) {
-    return rawOutput;
-  }
-
-  if (typeof rawOutput === "string") {
-    try {
-      return JSON.parse(rawOutput) as unknown;
-    } catch {
-      return rawOutput;
-    }
-  }
-
   return value;
 }
 
-function createProviderFetch(fetchImpl: FetchLike): FetchLike {
-  return async (input, init) => {
-    const headers = new Headers(init?.headers);
-
-    if (!headers.has("content-type")) {
-      headers.set("content-type", "application/json");
-    }
-
-    return fetchImpl(input, {
-      ...init,
-      headers,
-    });
+function buildStructuredClassificationRequest(
+  model: string,
+  text: string,
+): StructuredClassificationRequest {
+  return {
+    model,
+    input: [
+      {
+        role: "system",
+        content: [
+          {
+            type: "input_text",
+            text:
+              "Return only strict JSON for a content classification result with keys blocked, category, confidence, and matches. blocked must be a boolean. category must be one of hate, harassment, sexual, violence, or spam when blocked is true. confidence must be a number from 0 to 1. matches must be an array of rule matches with category and matchedText.",
+          },
+        ],
+      },
+      {
+        role: "user",
+        content: [
+          {
+            type: "input_text",
+            text,
+          },
+        ],
+      },
+    ],
+    response_format: {
+      type: "json_object",
+    },
   };
 }
 
@@ -201,10 +241,10 @@ async function runRealProvider(
   try {
     const response = await fetchImpl("https://api.openai.com/v1/responses", {
       method: "POST",
-      body: JSON.stringify({
-        model,
-        input: text,
-      }),
+      headers: {
+        "content-type": "application/json",
+      },
+      body: JSON.stringify(buildStructuredClassificationRequest(model, text)),
     });
 
     if (!response.ok) {
@@ -227,9 +267,15 @@ export async function classifyWithProvider(
     return createAllowResult();
   }
 
-  if ((aiConfig.model ?? "") === "mock") {
-    return normalizeProviderOutput(buildMockProviderResponse(text)) ?? createAllowResult();
+  const provider: AiProvider = aiConfig.provider ?? "openai";
+
+  if (provider === "mock") {
+    return buildMockProviderResponse(text);
   }
 
-  return runRealProvider(aiConfig.model ?? "gpt-4o-mini", text, createProviderFetch(fetchImpl));
+  if (provider === "openai") {
+    return runRealProvider(aiConfig.model ?? "gpt-4o-mini", text, fetchImpl);
+  }
+
+  return createAllowResult();
 }

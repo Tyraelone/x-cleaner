@@ -1,5 +1,7 @@
 export type ContentType = "post" | "reply" | "quote" | "profile" | "message";
 
+export type AiProvider = "mock" | "openai";
+
 export type FilterCategory =
   | "hate"
   | "harassment"
@@ -17,6 +19,7 @@ export interface CandidateContent {
 
 export interface AiConfig {
   enabled: boolean;
+  provider?: AiProvider;
   model?: string;
 }
 

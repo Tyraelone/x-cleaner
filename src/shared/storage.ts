@@ -47,6 +47,10 @@ function sanitizeSettingsPatch(value: unknown): SettingsPatch {
       aiPatch.enabled = value.ai.enabled;
     }
 
+    if (value.ai.provider === "mock" || value.ai.provider === "openai") {
+      aiPatch.provider = value.ai.provider;
+    }
+
     if (typeof value.ai.model === "string") {
       aiPatch.model = value.ai.model;
     }

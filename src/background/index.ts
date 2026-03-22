@@ -72,7 +72,10 @@ async function handleAiClassification(
   message: AiClassificationRequestMessage,
 ): Promise<RawAiClassificationResultMessage> {
   const settings = message.payload.settings ?? (await getSettings());
-  const apiKey = settings.ai.enabled ? await getApiKey() : null;
+  const apiKey =
+    settings.ai.enabled && settings.ai.provider !== "mock"
+      ? await getApiKey()
+      : null;
   const fetchImpl = apiKey ? createAuthorizedFetch(apiKey, fetch) : fetch;
   const result = await classifyWithProvider(
     settings.ai,
