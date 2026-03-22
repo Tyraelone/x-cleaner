@@ -1,27 +1,28 @@
 import type { CandidateContent, FilterCategory, RuleMatch, Settings } from "./types";
 
 export const REQUEST_AI_CLASSIFICATION = "request-ai-classification";
-export const AI_CLASSIFICATION_RESULT = "ai-classification-result";
+export const RAW_AI_CLASSIFICATION_RESULT = "raw-ai-classification-result";
 
-export interface RequestAiClassificationPayload {
+export interface AiClassificationRequestPayload {
+  requestId: string;
   candidate: CandidateContent;
   settings: Settings;
 }
 
-export interface AiClassificationResultPayload {
-  candidateId: string;
+export interface RawAiClassificationResponsePayload {
+  requestId: string;
   blocked: boolean;
   category?: FilterCategory;
   confidence: number;
   matches: RuleMatch[];
 }
 
-export interface RequestAiClassificationMessage {
+export interface AiClassificationRequestMessage {
   type: typeof REQUEST_AI_CLASSIFICATION;
-  payload: RequestAiClassificationPayload;
+  payload: AiClassificationRequestPayload;
 }
 
-export interface AiClassificationResultMessage {
-  type: typeof AI_CLASSIFICATION_RESULT;
-  payload: AiClassificationResultPayload;
+export interface RawAiClassificationResultMessage {
+  type: typeof RAW_AI_CLASSIFICATION_RESULT;
+  payload: RawAiClassificationResponsePayload;
 }

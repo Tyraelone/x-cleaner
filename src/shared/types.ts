@@ -47,10 +47,37 @@ export interface RuleMatch {
 
 export type ClassificationSource = "allowlist" | "blacklist" | "local" | "ai";
 
-export interface ClassificationDecision {
-  blocked: boolean;
-  category?: FilterCategory;
+interface AllowlistedDecision {
+  blocked: false;
+  source: "allowlist";
+  confidence: number;
+  matches: [];
+}
+
+interface NonBlockingDecision {
+  blocked: false;
+  source: "local" | "ai";
+  confidence: number;
+  matches: [];
+}
+
+interface BlacklistedDecision {
+  blocked: true;
+  source: "blacklist";
+  confidence: number;
+  matches: [];
+}
+
+interface BlockedRuleDecision {
+  blocked: true;
+  source: "local" | "ai";
+  category: FilterCategory;
   confidence: number;
   matches: RuleMatch[];
-  source: ClassificationSource;
 }
+
+export type ClassificationDecision =
+  | AllowlistedDecision
+  | NonBlockingDecision
+  | BlacklistedDecision
+  | BlockedRuleDecision;
