@@ -161,7 +161,8 @@ export async function saveSettings(settings: SettingsPatch): Promise<void> {
   }
 
   const currentSettings = await getSettings();
-  const mergedSettings = mergeSettings(currentSettings, settings);
+  const sanitizedPatch = sanitizeSettingsPatch(settings);
+  const mergedSettings = mergeSettings(currentSettings, sanitizedPatch);
 
   try {
     await storageArea.set({

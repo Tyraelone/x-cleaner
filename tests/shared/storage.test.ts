@@ -188,6 +188,45 @@ describe("saveSettings", () => {
       },
     });
   });
+
+  it("does not let malformed direct patch values erase persisted settings", async () => {
+    const persisted = {
+      ai: {
+        enabled: true,
+        model: "gpt-4o-mini",
+      },
+      confidenceThreshold: 0.65,
+      categories: {
+        hate: false,
+        harassment: true,
+        sexual: false,
+        violence: true,
+        spam: false,
+      },
+      allowlist: ["existing"],
+      blacklist: ["blocked"],
+      customKeywords: ["alpha"],
+    };
+    const set = vi.fn().mockResolvedValue(undefined);
+
+    vi.stubGlobal(
+      "chrome",
+      createChromeStorageMock({
+        syncGet: vi.fn().mockResolvedValue({ settings: persisted }),
+        syncSet: set,
+      }),
+    );
+
+    await saveSettings({
+      allowlist: "bad" as unknown as string[],
+      ai: "oops" as unknown as never,
+      confidenceThreshold: Number.NaN,
+    });
+
+    expect(set).toHaveBeenCalledWith({
+      settings: persisted,
+    });
+  });
 });
 
 describe("api key storage", () => {
