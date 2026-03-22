@@ -22,7 +22,7 @@ const localRuleTables: readonly LocalRuleTable[] = [
   {
     source: "hate",
     category: "hate",
-    keywords: ["violent slur", "hate speech", "slur"],
+    keywords: ["go back to your country", "subhuman people", "wipe them out"],
   },
   {
     source: "harassment",
