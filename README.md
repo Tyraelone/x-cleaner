@@ -100,4 +100,4 @@ npm run build
 
 ## Status
 
-`v0.1.2` adds Volcengine Ark as an AI moderation provider through its OpenAI-compatible API while preserving the existing local-first filtering flow.
+`v0.1.3` fixes the missing content-to-background AI filtering bridge so enabling AI review now actually classifies and collapses matching X content.

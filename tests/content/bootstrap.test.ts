@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 
 import { JSDOM } from "jsdom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { REQUEST_AI_CLASSIFICATION } from "../../src/shared/messages";
 
 type Candidate = {
   id: string;
@@ -222,5 +223,66 @@ describe("content bootstrap", () => {
     ).toBe(true);
 
     expect(dom.window.document.querySelectorAll("button")).toHaveLength(2);
+  });
+
+  it("sends ai classification requests and collapses matching content when ai is enabled", async () => {
+    const dom = createDom(fixture("timeline-tweet"));
+    const sendMessage = vi.fn().mockImplementation(async (message: unknown) => {
+      expect(message).toMatchObject({
+        type: REQUEST_AI_CLASSIFICATION,
+        payload: {
+          candidate: {
+            text: "Hello from the timeline!",
+          },
+        },
+      });
+
+      return {
+        type: "raw-ai-classification-result",
+        payload: {
+          requestId: "request-1",
+          blocked: true,
+          category: "spam",
+          confidence: 0.95,
+          matches: [
+            {
+              category: "spam",
+              matchedText: "hello",
+            },
+          ],
+        },
+      };
+    });
+
+    vi.stubGlobal("document", dom.window.document);
+    vi.stubGlobal("MutationObserver", FakeMutationObserver as unknown as typeof MutationObserver);
+    vi.stubGlobal("chrome", {
+      runtime: {
+        sendMessage,
+      },
+      storage: {
+        sync: {
+          get: vi.fn().mockResolvedValue({
+            settings: {
+              ai: {
+                enabled: true,
+                provider: "mock",
+              },
+            },
+          }),
+          set: vi.fn(),
+        },
+        local: {
+          get: vi.fn().mockResolvedValue({}),
+          set: vi.fn(),
+        },
+      },
+    });
+
+    await loadBootstrap();
+    await vi.waitFor(() => expect(sendMessage).toHaveBeenCalledTimes(1));
+
+    expect(dom.window.document.querySelector("button")).toBeTruthy();
+    expect(dom.window.document.body.textContent).toContain("Filtered spam");
   });
 });

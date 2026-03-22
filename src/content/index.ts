@@ -1,7 +1,14 @@
 import { extractCandidatesFromRoot, isCandidateContainer } from "./selectors";
 import { collapseElement } from "./render";
+import { classifyCandidate, type RawAiClassificationResult } from "../shared/classifier";
+import { getSettings } from "../shared/storage";
 import { fingerprintText } from "../shared/text";
-import type { CandidateContent } from "../shared/types";
+import {
+  RAW_AI_CLASSIFICATION_RESULT,
+  REQUEST_AI_CLASSIFICATION,
+  type RawAiClassificationResultMessage,
+} from "../shared/messages";
+import type { CandidateContent, FilterCategory, Settings } from "../shared/types";
 
 type RootNode = ParentNode & {
   querySelectorAll(selectors: string): NodeListOf<Element>;
@@ -12,6 +19,12 @@ interface MutationObserverLike {
   disconnect?: () => void;
 }
 
+interface ChromeRuntimeLike {
+  runtime?: {
+    sendMessage?: (message: unknown) => Promise<unknown>;
+  };
+}
+
 export interface StartContentExtractionOptions {
   root?: RootNode;
   onCandidate?: (candidate: CandidateContent) => void;
@@ -19,6 +32,7 @@ export interface StartContentExtractionOptions {
 }
 
 const candidateElements = new Map<string, Set<Element>>();
+let activeSettingsPromise: Promise<Settings> | null = null;
 
 function fingerprintCandidate(candidate: CandidateContent): string {
   return [
@@ -122,6 +136,72 @@ export function collapseTrackedCandidate(
   return collapsedAny;
 }
 
+function getCategoryTitle(category: FilterCategory): string {
+  return `Filtered ${category}`;
+}
+
+function getDecisionReason(
+  category: FilterCategory,
+  source: "local" | "ai",
+  matchedText?: string,
+): string {
+  if (matchedText) {
+    return `${source} match: ${matchedText}`;
+  }
+
+  return `${source} match: ${category}`;
+}
+
+async function getActiveSettings(): Promise<Settings> {
+  activeSettingsPromise ??= getSettings();
+  return activeSettingsPromise;
+}
+
+async function requestAiClassification(
+  candidate: CandidateContent,
+  settings: Settings,
+): Promise<RawAiClassificationResult | null> {
+  const chromeApi = globalThis as typeof globalThis & { chrome?: ChromeRuntimeLike };
+  const sendMessage = chromeApi.chrome?.runtime?.sendMessage;
+
+  if (!sendMessage) {
+    return null;
+  }
+
+  const response = (await sendMessage({
+    type: REQUEST_AI_CLASSIFICATION,
+    payload: {
+      requestId: `${candidate.id}:${Date.now()}`,
+      candidate,
+      settings,
+    },
+  })) as RawAiClassificationResultMessage | null;
+
+  if (!response || response.type !== RAW_AI_CLASSIFICATION_RESULT) {
+    return null;
+  }
+
+  const { requestId: _requestId, ...result } = response.payload;
+  return result;
+}
+
+async function processCandidate(candidate: CandidateContent): Promise<void> {
+  const settings = await getActiveSettings();
+  const decision = await classifyCandidate(candidate, settings, requestAiClassification);
+
+  if (!decision.blocked || decision.source === "allowlist" || decision.source === "blacklist") {
+    return;
+  }
+
+  const fingerprint = fingerprintCandidate(candidate);
+  const firstMatch = decision.matches[0];
+
+  collapseTrackedCandidate(fingerprint, {
+    title: getCategoryTitle(decision.category),
+    reason: getDecisionReason(decision.category, decision.source, firstMatch?.matchedText),
+  });
+}
+
 function registerCandidateElement(fingerprint: string, target: Element): void {
   const existingTargets = candidateElements.get(fingerprint) ?? new Set<Element>();
 
@@ -147,7 +227,9 @@ export function startContentExtraction(
   }
 
   const seenFingerprints = new Set<string>();
-  const onCandidate = options.onCandidate ?? (() => {});
+  const onCandidate = options.onCandidate ?? ((candidate) => {
+    void processCandidate(candidate);
+  });
   const observerFactory =
     options.observerFactory ??
     ((callback) => new MutationObserver(callback) as unknown as MutationObserverLike);
