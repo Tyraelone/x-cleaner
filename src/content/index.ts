@@ -1,4 +1,5 @@
 import { extractCandidatesFromRoot, isCandidateContainer } from "./selectors";
+import { collapseElement } from "./render";
 import { fingerprintText } from "../shared/text";
 import type { CandidateContent } from "../shared/types";
 
@@ -16,6 +17,8 @@ export interface StartContentExtractionOptions {
   onCandidate?: (candidate: CandidateContent) => void;
   observerFactory?: (callback: MutationCallback) => MutationObserverLike;
 }
+
+const candidateElements = new Map<string, Set<Element>>();
 
 function fingerprintCandidate(candidate: CandidateContent): string {
   return [
@@ -50,6 +53,88 @@ function scanAncestorContainers(
   }
 }
 
+function getCandidateElement(node: RootNode, candidate: CandidateContent): Element | null {
+  if ("matches" in node && isCandidateContainer(node)) {
+    return node;
+  }
+
+  if (candidate.type === "post" || candidate.type === "reply") {
+    return Array.from(node.querySelectorAll('article[data-testid="tweet"]')).find((element) => {
+      const url = candidate.url;
+
+      if (url) {
+        return element.querySelector(`a[href="${url}"]`) !== null;
+      }
+
+      return element.textContent?.includes(candidate.text) ?? false;
+    }) ?? null;
+  }
+
+  return Array.from(
+    node.querySelectorAll(
+      'header[data-testid="ProfileHeader"], div[data-testid="HoverCard"]',
+    ),
+  ).find((element) => {
+    if (candidate.url) {
+      return element.querySelector(`a[href="${candidate.url}"]`) !== null;
+    }
+
+    return element.textContent?.includes(candidate.text) ?? false;
+  }) ?? null;
+}
+
+export function collapseTrackedCandidate(
+  fingerprint: string,
+  matchInfo: {
+    title: string;
+    reason: string;
+  },
+): boolean {
+  const targets = candidateElements.get(fingerprint);
+
+  if (!targets) {
+    return false;
+  }
+
+  let collapsedAny = false;
+
+  for (const target of Array.from(targets)) {
+    if (!target.isConnected) {
+      targets.delete(target);
+      continue;
+    }
+
+    if (
+      collapseElement(target, {
+        fingerprint,
+        title: matchInfo.title,
+        reason: matchInfo.reason,
+      })
+    ) {
+      collapsedAny = true;
+    }
+  }
+
+  if (targets.size === 0) {
+    candidateElements.delete(fingerprint);
+  }
+
+  return collapsedAny;
+}
+
+function registerCandidateElement(fingerprint: string, target: Element): void {
+  const existingTargets = candidateElements.get(fingerprint) ?? new Set<Element>();
+
+  for (const existingTarget of Array.from(existingTargets)) {
+    if (!existingTarget.isConnected) {
+      existingTargets.delete(existingTarget);
+    }
+  }
+
+  existingTargets.add(target);
+  candidateElements.set(fingerprint, existingTargets);
+}
+
 export function startContentExtraction(
   options: StartContentExtractionOptions = {},
 ): MutationObserverLike | undefined {
@@ -67,19 +152,29 @@ export function startContentExtraction(
     options.observerFactory ??
     ((callback) => new MutationObserver(callback) as unknown as MutationObserverLike);
 
-  function recordCandidate(candidate: CandidateContent): void {
+  function recordCandidate(candidate: CandidateContent): boolean {
     const fingerprint = fingerprintCandidate(candidate);
 
     if (seenFingerprints.has(fingerprint)) {
-      return;
+      return false;
     }
 
     seenFingerprints.add(fingerprint);
     onCandidate(candidate);
+    return true;
   }
 
   function scanRoot(node: RootNode): void {
-    for (const candidate of extractCandidatesFromRoot(node)) {
+    const candidates = extractCandidatesFromRoot(node);
+
+    for (const candidate of candidates) {
+      const fingerprint = fingerprintCandidate(candidate);
+      const target = getCandidateElement(node, candidate);
+
+      if (target) {
+        registerCandidateElement(fingerprint, target);
+      }
+
       recordCandidate(candidate);
     }
   }

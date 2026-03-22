@@ -198,4 +198,29 @@ describe("content bootstrap", () => {
       },
     ]);
   });
+
+  it("collapses all connected targets for the same fingerprint in the active document", async () => {
+    const dom = createDom(fixture("timeline-tweet"));
+    const { collapseTrackedCandidate, startContentExtraction } = await loadBootstrap();
+
+    startContentExtraction({
+      root: dom.window.document.body,
+      observerFactory: (callback) => new FakeMutationObserver(callback),
+    });
+
+    const originalArticle = dom.window.document.body.firstElementChild as Element;
+    const duplicateArticle = originalArticle.cloneNode(true) as Element;
+    dom.window.document.body.appendChild(duplicateArticle);
+
+    FakeMutationObserver.instances[0].trigger([duplicateArticle]);
+
+    expect(
+      collapseTrackedCandidate("post|hello from the timeline!|@alice|https://x.com/alice/status/111", {
+        title: "Filtered post",
+        reason: "keyword match",
+      }),
+    ).toBe(true);
+
+    expect(dom.window.document.querySelectorAll("button")).toHaveLength(2);
+  });
 });
