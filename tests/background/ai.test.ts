@@ -126,6 +126,63 @@ describe("classifyWithProvider", () => {
     expect(JSON.parse(init.body as string)).not.toHaveProperty("response_format");
   });
 
+  it("requests a chat completion from volcengine ark and normalizes it", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue({
+      ok: true,
+      json: vi.fn().mockResolvedValue({
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({
+                blocked: true,
+                category: "harassment",
+                confidence: 0.88,
+                matches: [
+                  {
+                    category: "harassment",
+                    matchedText: "idiot",
+                  },
+                ],
+              }),
+            },
+          },
+        ],
+      }),
+    });
+
+    const result = await classifyWithProvider(
+      {
+        enabled: true,
+        provider: "ark",
+        model: "doubao-seed-1-6-250615",
+      } as any,
+      "you are an idiot",
+      fetchImpl,
+    );
+
+    expect(result).toEqual({
+      blocked: true,
+      category: "harassment",
+      confidence: 0.88,
+      matches: [
+        {
+          category: "harassment",
+          matchedText: "idiot",
+        },
+      ],
+    });
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchImpl.mock.calls[0];
+    expect(url).toBe("https://operator.las.cn-beijing.volces.com/api/v1/chat/completions");
+    expect(JSON.parse(init.body as string)).toMatchObject({
+      model: "doubao-seed-1-6-250615",
+      messages: expect.arrayContaining([
+        expect.objectContaining({ role: "system" }),
+        expect.objectContaining({ role: "user", content: "you are an idiot" }),
+      ]),
+    });
+  });
+
   it("falls back to a non-blocking result when fetch fails", async () => {
     const fetchImpl = vi.fn().mockRejectedValue(new Error("network down"));
 

@@ -21,8 +21,12 @@ interface ChromeRuntimeLike {
   };
 }
 
-function getAiProvider(provider: string | undefined): "mock" | "openai" {
-  return provider === "mock" ? "mock" : "openai";
+function getAiProvider(provider: string | undefined): "mock" | "openai" | "ark" {
+  if (provider === "mock" || provider === "ark") {
+    return provider;
+  }
+
+  return "openai";
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -77,8 +81,9 @@ async function handleAiClassification(
 ): Promise<RawAiClassificationResultMessage> {
   const settings = message.payload.settings ?? (await getSettings());
   const provider = getAiProvider(settings.ai.provider);
+  const needsApiKey = settings.ai.enabled && provider !== "mock";
 
-  if (settings.ai.enabled && provider === "openai") {
+  if (needsApiKey) {
     const apiKey = await getApiKey();
 
     if (!apiKey) {
@@ -100,12 +105,10 @@ async function handleAiClassification(
     };
   }
 
-  const apiKey = settings.ai.enabled && provider !== "mock" ? await getApiKey() : null;
-  const fetchImpl = apiKey ? createAuthorizedFetch(apiKey, fetch) : fetch;
   const result = await classifyWithProvider(
     settings.ai,
     message.payload.candidate.text,
-    fetchImpl,
+    fetch,
   );
 
   return {

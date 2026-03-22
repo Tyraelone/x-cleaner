@@ -1,6 +1,6 @@
 export type ContentType = "post" | "reply" | "quote" | "profile" | "message";
 
-export type AiProvider = "mock" | "openai";
+export type AiProvider = "mock" | "openai" | "ark";
 
 export type FilterCategory =
   | "hate"

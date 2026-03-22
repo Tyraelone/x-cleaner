@@ -21,6 +21,7 @@ describe("renderSettingsForm", () => {
     expect(getByLabelText(document.body, "Provider")).toBeTruthy();
     expect(getByLabelText(document.body, "Model")).toBeTruthy();
     expect(getByLabelText(document.body, "API key")).toBeTruthy();
+    expect(getByText(document.body, "Volcengine Ark")).toBeTruthy();
   });
 
   it("saves updates through a callback", () => {
@@ -94,5 +95,34 @@ describe("renderSettingsForm", () => {
 
     expect((getByLabelText(document.body, "Hate") as HTMLInputElement).checked).toBe(false);
     expect(form).toBeTruthy();
+  });
+
+  it("saves the volcengine ark provider", () => {
+    document.body.innerHTML = '<div id="app"></div>';
+    const onSave = vi.fn();
+
+    renderSettingsForm(document.getElementById("app")!, createDefaultSettings(), {
+      onSave,
+    });
+
+    fireEvent.change(getByLabelText(document.body, "Provider"), {
+      target: { value: "ark" },
+    });
+    fireEvent.input(getByLabelText(document.body, "Model"), {
+      target: { value: "doubao-seed-1-6-250615" },
+    });
+    fireEvent.click(getByRole(document.body, "button", { name: "Save settings" }));
+
+    expect(onSave).toHaveBeenCalledWith(
+      expect.objectContaining({
+        settings: expect.objectContaining({
+          ai: {
+            enabled: false,
+            provider: "ark",
+            model: "doubao-seed-1-6-250615",
+          },
+        }),
+      }),
+    );
   });
 });

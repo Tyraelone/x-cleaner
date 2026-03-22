@@ -166,10 +166,15 @@ export function renderSettingsForm(
 
   const providerSelect = document.createElement("select");
   providerSelect.id = "ai-provider";
-  for (const provider of ["openai", "mock"] as AiProvider[]) {
+  for (const provider of ["openai", "ark", "mock"] as AiProvider[]) {
     const option = document.createElement("option");
     option.value = provider;
-    option.textContent = provider === "openai" ? "OpenAI" : "Mock";
+    option.textContent =
+      provider === "openai"
+        ? "OpenAI"
+        : provider === "ark"
+          ? "Volcengine Ark"
+          : "Mock";
     providerSelect.append(option);
   }
   providerSelect.value = savedSnapshot.ai.provider ?? "openai";

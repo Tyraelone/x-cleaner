@@ -30,6 +30,17 @@ type StructuredClassificationRequest = {
   };
 };
 
+type ArkChatCompletionRequest = {
+  model: string;
+  messages: Array<{
+    role: "system" | "user";
+    content: string;
+  }>;
+  response_format: {
+    type: "json_object";
+  };
+};
+
 function createAllowResult(confidence = 0): RawAiClassificationResult {
   return {
     blocked: false,
@@ -228,6 +239,24 @@ function extractResponsesOutputText(value: unknown): string | null {
   return null;
 }
 
+function extractChatCompletionOutputText(value: unknown): string | null {
+  if (!isRecord(value) || !Array.isArray(value.choices)) {
+    return null;
+  }
+
+  for (const choice of value.choices) {
+    if (!isRecord(choice) || !isRecord(choice.message)) {
+      continue;
+    }
+
+    if (typeof choice.message.content === "string") {
+      return choice.message.content;
+    }
+  }
+
+  return null;
+}
+
 function buildStructuredClassificationRequest(
   model: string,
   text: string,
@@ -331,6 +360,29 @@ function buildStructuredClassificationRequest(
   };
 }
 
+function buildArkClassificationRequest(
+  model: string,
+  text: string,
+): ArkChatCompletionRequest {
+  return {
+    model,
+    messages: [
+      {
+        role: "system",
+        content:
+          "Return only strict JSON for a content classification result with keys blocked, category, confidence, and matches. blocked must be a boolean. category must be one of hate, harassment, sexual, violence, or spam when blocked is true. confidence must be a number from 0 to 1. matches must be an array of rule matches with category and matchedText.",
+      },
+      {
+        role: "user",
+        content: text,
+      },
+    ],
+    response_format: {
+      type: "json_object",
+    },
+  };
+}
+
 async function runRealProvider(
   model: string,
   text: string,
@@ -366,6 +418,44 @@ async function runRealProvider(
   }
 }
 
+async function runArkProvider(
+  model: string,
+  text: string,
+  fetchImpl: FetchLike,
+): Promise<RawAiClassificationResult> {
+  try {
+    const response = await fetchImpl(
+      "https://operator.las.cn-beijing.volces.com/api/v1/chat/completions",
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify(buildArkClassificationRequest(model, text)),
+      },
+    );
+
+    if (!response.ok) {
+      return createAllowResult();
+    }
+
+    const payload = await response.json();
+    const outputText = extractChatCompletionOutputText(payload);
+
+    if (!outputText) {
+      return createAllowResult();
+    }
+
+    try {
+      return normalizeProviderOutput(JSON.parse(outputText) as unknown) ?? createAllowResult();
+    } catch {
+      return createAllowResult();
+    }
+  } catch {
+    return createAllowResult();
+  }
+}
+
 export async function classifyWithProvider(
   aiConfig: AiConfig,
   text: string,
@@ -383,6 +473,10 @@ export async function classifyWithProvider(
 
   if (provider === "openai") {
     return runRealProvider(aiConfig.model ?? "gpt-4o-mini", text, fetchImpl);
+  }
+
+  if (provider === "ark") {
+    return runArkProvider(aiConfig.model ?? "doubao-seed-1-6-250615", text, fetchImpl);
   }
 
   return createAllowResult();

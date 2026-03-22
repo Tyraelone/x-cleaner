@@ -227,6 +227,34 @@ describe("saveSettings", () => {
       settings: persisted,
     });
   });
+
+  it("persists the ark provider when saving a patch", async () => {
+    const set = vi.fn().mockResolvedValue(undefined);
+
+    vi.stubGlobal(
+      "chrome",
+      createChromeStorageMock({
+        syncGet: vi.fn().mockResolvedValue({ settings: {} }),
+        syncSet: set,
+      }),
+    );
+
+    await saveSettings({
+      ai: {
+        provider: "ark" as const,
+        model: "doubao-seed-1-6-250615",
+      },
+    });
+
+    expect(set).toHaveBeenCalledWith({
+      settings: expect.objectContaining({
+        ai: expect.objectContaining({
+          provider: "ark",
+          model: "doubao-seed-1-6-250615",
+        }),
+      }),
+    });
+  });
 });
 
 describe("api key storage", () => {

@@ -58,6 +58,7 @@ Current behavior:
 - local rules run first
 - AI is only used when enabled in settings
 - OpenAI is supported as a provider
+- Volcengine Ark is supported through its OpenAI-compatible API
 - a mock provider is available for local testing
 - if the API key is missing or AI fails, the extension falls back safely instead of breaking page behavior
 
@@ -99,4 +100,4 @@ npm run build
 
 ## Status
 
-`v0.1.1` adds broader multilingual local-rule coverage for Chinese and English abuse patterns while keeping the first-release extension behavior and packaging flow intact.
+`v0.1.2` adds Volcengine Ark as an AI moderation provider through its OpenAI-compatible API while preserving the existing local-first filtering flow.
