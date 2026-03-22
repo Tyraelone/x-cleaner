@@ -1,4 +1,5 @@
-import type { CandidateContent, FilterCategory, RuleMatch, Settings } from "./types";
+import type { RawAiClassificationResult } from "./classifier";
+import type { CandidateContent, Settings } from "./types";
 
 export const REQUEST_AI_CLASSIFICATION = "request-ai-classification";
 export const RAW_AI_CLASSIFICATION_RESULT = "raw-ai-classification-result";
@@ -9,13 +10,9 @@ export interface AiClassificationRequestPayload {
   settings: Settings;
 }
 
-export interface RawAiClassificationResponsePayload {
+export type RawAiClassificationResponsePayload = RawAiClassificationResult & {
   requestId: string;
-  blocked: boolean;
-  category?: FilterCategory;
-  confidence: number;
-  matches: RuleMatch[];
-}
+};
 
 export interface AiClassificationRequestMessage {
   type: typeof REQUEST_AI_CLASSIFICATION;
