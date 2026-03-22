@@ -1,8 +1,5 @@
 import type { CandidateContent, ContentType } from "../shared/types";
 
-const TWEET_ARTICLE_SELECTOR = 'article[data-testid="tweet"]';
-const TWEET_TEXT_SELECTOR = '[data-testid="tweetText"]';
-const USER_NAME_SELECTOR = '[data-testid="User-Name"]';
 const PROFILE_HEADER_SELECTOR = 'header[data-testid="ProfileHeader"]';
 const PROFILE_NAME_SELECTOR = '[data-testid="UserName"]';
 const PROFILE_NAME_DISPLAY_SELECTOR = '[data-testid="UserNameDisplayName"]';
@@ -15,10 +12,17 @@ const HOVER_CARD_NAME_DISPLAY_SELECTOR = '[data-testid="UserNameDisplayName"]';
 const HOVER_CARD_NAME_HANDLE_SELECTOR = '[data-testid="UserNameHandle"]';
 const HOVER_CARD_BIO_SELECTOR = '[data-testid="UserDescription"]';
 const HOVER_CARD_LINK_SELECTOR = 'a[data-testid="UserProfileLink"]';
+const TWEET_ARTICLE_SELECTOR = 'article[data-testid="tweet"]';
+const CANDIDATE_CONTAINER_SELECTOR = `${TWEET_ARTICLE_SELECTOR}, ${PROFILE_HEADER_SELECTOR}, ${HOVER_CARD_SELECTOR}`;
+const TWEET_TEXT_SELECTOR = '[data-testid="tweetText"]';
+const USER_NAME_SELECTOR = '[data-testid="User-Name"]';
 const REPLY_CONTAINER_SELECTOR = '[data-testid="reply"]';
-const STATUS_LINK_SELECTOR = 'a[href*="/status/"]';
 
 type QueryRoot = Document | Element | DocumentFragment | ShadowRoot;
+
+export function isCandidateContainer(element: Element): boolean {
+  return element.matches(CANDIDATE_CONTAINER_SELECTOR);
+}
 
 function collapseWhitespace(text: string): string {
   return text.replace(/\s+/g, " ").trim();
@@ -30,6 +34,38 @@ function findFirstElement(root: QueryRoot, selectors: string[]): Element | null 
 
     if (element) {
       return element;
+    }
+  }
+
+  return null;
+}
+
+function nearestCandidateContainer(element: Element): Element | null {
+  return element.closest(CANDIDATE_CONTAINER_SELECTOR);
+}
+
+function isWithinContainerScope(element: Element, container: Element): boolean {
+  return nearestCandidateContainer(element) === container;
+}
+
+function findFirstScopedElement(
+  root: QueryRoot,
+  selectors: string[],
+  container: Element,
+): Element | null {
+  if ("matches" in root) {
+    for (const selector of selectors) {
+      if (root.matches(selector) && isWithinContainerScope(root, container)) {
+        return root;
+      }
+    }
+  }
+
+  for (const selector of selectors) {
+    for (const element of root.querySelectorAll(selector)) {
+      if (isWithinContainerScope(element, container)) {
+        return element;
+      }
     }
   }
 
@@ -81,7 +117,7 @@ function extractUrl(element: Element | null): string | undefined {
 
 function extractTweetPermalink(article: Element): Element | null {
   for (const timeElement of article.querySelectorAll("time")) {
-    if (timeElement.closest("article") !== article) {
+    if (nearestCandidateContainer(timeElement) !== article) {
       continue;
     }
 
@@ -92,7 +128,7 @@ function extractTweetPermalink(article: Element): Element | null {
     }
   }
 
-  return findFirstElement(article, [STATUS_LINK_SELECTOR]);
+  return null;
 }
 
 function createCandidate(
@@ -120,8 +156,10 @@ function createCandidate(
 }
 
 function extractTweetCandidate(article: Element): CandidateContent | null {
-  const text = textFromElement(findFirstElement(article, [TWEET_TEXT_SELECTOR]));
-  const nameLink = findFirstElement(article, [USER_NAME_SELECTOR]);
+  const text = textFromElement(
+    findFirstScopedElement(article, [TWEET_TEXT_SELECTOR], article),
+  );
+  const nameLink = findFirstScopedElement(article, [USER_NAME_SELECTOR], article);
   const statusLink = extractTweetPermalink(article);
   const authorHandle = nameLink ? extractHandle(textFromElement(nameLink)) : undefined;
   const url = extractUrl(statusLink);
@@ -136,20 +174,23 @@ function extractProfileCandidate(
   scope: "profile" | "hover",
 ): CandidateContent | null {
   const nameElement =
-    findFirstElement(
+    findFirstScopedElement(
       container,
       [scope === "profile" ? PROFILE_NAME_SELECTOR : HOVER_CARD_NAME_SELECTOR],
+      container,
     );
   const bioElement =
-    findFirstElement(
+    findFirstScopedElement(
       container,
       [scope === "profile" ? PROFILE_BIO_SELECTOR : HOVER_CARD_BIO_SELECTOR],
+      container,
     );
   const link =
-    findFirstElement(
+    findFirstScopedElement(
       container,
       [scope === "profile" ? PROFILE_LINK_SELECTOR : HOVER_CARD_LINK_SELECTOR],
-  );
+      container,
+    );
   const { displayName, handle } = extractNameParts(nameElement, scope);
   const bio = textFromElement(bioElement);
   const authorHandle = handle;
@@ -167,7 +208,7 @@ export function extractCandidatesFromRoot(root: QueryRoot): CandidateContent[] {
   const candidates: CandidateContent[] = [];
 
   if ("matches" in root) {
-    if (root.matches(TWEET_ARTICLE_SELECTOR)) {
+    if (isCandidateContainer(root) && root.matches(TWEET_ARTICLE_SELECTOR)) {
       const candidate = extractTweetCandidate(root);
 
       if (candidate) {
@@ -175,7 +216,7 @@ export function extractCandidatesFromRoot(root: QueryRoot): CandidateContent[] {
       }
     }
 
-    if (root.matches(PROFILE_HEADER_SELECTOR)) {
+    if (isCandidateContainer(root) && root.matches(PROFILE_HEADER_SELECTOR)) {
       const candidate = extractProfileCandidate(root, "profile");
 
       if (candidate) {
@@ -183,7 +224,7 @@ export function extractCandidatesFromRoot(root: QueryRoot): CandidateContent[] {
       }
     }
 
-    if (root.matches(HOVER_CARD_SELECTOR)) {
+    if (isCandidateContainer(root) && root.matches(HOVER_CARD_SELECTOR)) {
       const candidate = extractProfileCandidate(root, "hover");
 
       if (candidate) {

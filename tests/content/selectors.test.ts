@@ -33,8 +33,8 @@ describe("extractCandidatesFromRoot", () => {
     ]);
   });
 
-  it("extracts the outer tweet permalink when nested status links exist", () => {
-    const root = loadFixture("timeline-with-nested-status-link");
+  it("extracts the outer tweet permalink when nested quote content exists", () => {
+    const root = loadFixture("tweet-with-nested-quote");
     const candidates = extractCandidatesFromRoot(root);
 
     expect(candidates).toContainEqual({
@@ -81,6 +81,20 @@ describe("extractCandidatesFromRoot", () => {
         bio: "Writer, builder, and coffee enthusiast.",
       },
     ]);
+  });
+
+  it("keeps profile header fields scoped when hover content is nested", () => {
+    const root = loadFixture("profile-header-with-nested-hover");
+
+    expect(extractCandidatesFromRoot(root)).toContainEqual({
+      id: "https://x.com/carol",
+      type: "profile",
+      text: "Carol Chen Writer, builder, and coffee enthusiast.",
+      authorHandle: "@carol",
+      url: "https://x.com/carol",
+      displayName: "Carol Chen",
+      bio: "Writer, builder, and coffee enthusiast.",
+    });
   });
 
   it("extracts a hover card with display name and bio", () => {

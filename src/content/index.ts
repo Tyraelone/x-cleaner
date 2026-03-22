@@ -1,4 +1,4 @@
-import { extractCandidatesFromRoot } from "./selectors";
+import { extractCandidatesFromRoot, isCandidateContainer } from "./selectors";
 import { fingerprintText } from "../shared/text";
 import type { CandidateContent } from "../shared/types";
 
@@ -28,6 +28,26 @@ function fingerprintCandidate(candidate: CandidateContent): string {
 
 function isCandidateNode(node: Node): node is RootNode {
   return "querySelectorAll" in node;
+}
+
+function scanAncestorContainers(
+  root: RootNode,
+  node: Node,
+  scanRoot: (node: RootNode) => void,
+): void {
+  let ancestor = node.parentElement;
+
+  while (ancestor) {
+    if (isCandidateContainer(ancestor)) {
+      scanRoot(ancestor);
+    }
+
+    if (ancestor === root) {
+      break;
+    }
+
+    ancestor = ancestor.parentElement;
+  }
 }
 
 export function startContentExtraction(
@@ -72,6 +92,7 @@ export function startContentExtraction(
         }
 
         scanRoot(node);
+        scanAncestorContainers(root, node, scanRoot);
       }
     }
   });

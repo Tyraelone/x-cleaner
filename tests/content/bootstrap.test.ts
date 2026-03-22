@@ -127,6 +127,49 @@ describe("content bootstrap", () => {
     ]);
   });
 
+  it("rescans ancestor containers when a candidate is assembled incrementally", async () => {
+    const dom = createDom(fixture("profile-header-shell"));
+    const processed: Candidate[] = [];
+    const { startContentExtraction } = await loadBootstrap();
+
+    startContentExtraction({
+      root: dom.window.document.body,
+      onCandidate: (candidate) => processed.push(candidate as Candidate),
+      observerFactory: (callback) => new FakeMutationObserver(callback),
+    });
+
+    const header = dom.window.document.body.firstElementChild as HTMLElement;
+    const name = dom.window.document.createElement("div");
+    name.setAttribute("data-testid", "UserName");
+    name.innerHTML = `
+      <span data-testid="UserNameDisplayName">Carol Chen</span>
+      <span data-testid="UserNameHandle">@carol</span>
+    `;
+    const bio = dom.window.document.createElement("div");
+    bio.setAttribute("data-testid", "UserDescription");
+    bio.textContent = "Writer, builder, and coffee enthusiast.";
+    const link = dom.window.document.createElement("a");
+    link.setAttribute("data-testid", "UserProfileLink");
+    link.href = "https://x.com/carol";
+    link.textContent = "Profile";
+
+    header.append(name, bio, link);
+
+    FakeMutationObserver.instances[0].trigger([name, bio, link]);
+
+    expect(processed).toEqual([
+      {
+        id: "https://x.com/carol",
+        type: "profile",
+        text: "Carol Chen Writer, builder, and coffee enthusiast.",
+        authorHandle: "@carol",
+        url: "https://x.com/carol",
+        displayName: "Carol Chen",
+        bio: "Writer, builder, and coffee enthusiast.",
+      },
+    ]);
+  });
+
   it("suppresses duplicate candidates by fingerprint", async () => {
     const dom = createDom(fixture("profile-header"));
     const processed: Candidate[] = [];
