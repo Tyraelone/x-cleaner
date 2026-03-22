@@ -79,12 +79,29 @@ function extractUrl(element: Element | null): string | undefined {
   return (element as HTMLAnchorElement).href || element.getAttribute("href") || undefined;
 }
 
+function extractTweetPermalink(article: Element): Element | null {
+  for (const timeElement of article.querySelectorAll("time")) {
+    if (timeElement.closest("article") !== article) {
+      continue;
+    }
+
+    const link = timeElement.closest('a[href*="/status/"]');
+
+    if (link) {
+      return link;
+    }
+  }
+
+  return findFirstElement(article, [STATUS_LINK_SELECTOR]);
+}
+
 function createCandidate(
   id: string,
   type: ContentType,
   text: string,
   authorHandle?: string,
   url?: string,
+  extras?: Partial<Pick<CandidateContent, "displayName" | "bio">>,
 ): CandidateContent | null {
   const normalizedText = collapseWhitespace(text);
 
@@ -98,13 +115,14 @@ function createCandidate(
     text: normalizedText,
     ...(authorHandle ? { authorHandle } : {}),
     ...(url ? { url } : {}),
+    ...(extras ?? {}),
   };
 }
 
 function extractTweetCandidate(article: Element): CandidateContent | null {
   const text = textFromElement(findFirstElement(article, [TWEET_TEXT_SELECTOR]));
   const nameLink = findFirstElement(article, [USER_NAME_SELECTOR]);
-  const statusLink = findFirstElement(article, [STATUS_LINK_SELECTOR]);
+  const statusLink = extractTweetPermalink(article);
   const authorHandle = nameLink ? extractHandle(textFromElement(nameLink)) : undefined;
   const url = extractUrl(statusLink);
   const type = article.closest(REPLY_CONTAINER_SELECTOR) ? "reply" : "post";
@@ -131,7 +149,7 @@ function extractProfileCandidate(
     findFirstElement(
       container,
       [scope === "profile" ? PROFILE_LINK_SELECTOR : HOVER_CARD_LINK_SELECTOR],
-    );
+  );
   const { displayName, handle } = extractNameParts(nameElement, scope);
   const bio = textFromElement(bioElement);
   const authorHandle = handle;
@@ -139,11 +157,40 @@ function extractProfileCandidate(
   const url = extractUrl(link);
   const id = url ?? `${scope}:${collapseWhitespace(text)}`;
 
-  return createCandidate(id, "profile", text, authorHandle, url);
+  return createCandidate(id, "profile", text, authorHandle, url, {
+    displayName,
+    bio: bio || undefined,
+  });
 }
 
 export function extractCandidatesFromRoot(root: QueryRoot): CandidateContent[] {
   const candidates: CandidateContent[] = [];
+
+  if ("matches" in root) {
+    if (root.matches(TWEET_ARTICLE_SELECTOR)) {
+      const candidate = extractTweetCandidate(root);
+
+      if (candidate) {
+        candidates.push(candidate);
+      }
+    }
+
+    if (root.matches(PROFILE_HEADER_SELECTOR)) {
+      const candidate = extractProfileCandidate(root, "profile");
+
+      if (candidate) {
+        candidates.push(candidate);
+      }
+    }
+
+    if (root.matches(HOVER_CARD_SELECTOR)) {
+      const candidate = extractProfileCandidate(root, "hover");
+
+      if (candidate) {
+        candidates.push(candidate);
+      }
+    }
+  }
 
   for (const article of root.querySelectorAll(TWEET_ARTICLE_SELECTOR)) {
     const candidate = extractTweetCandidate(article);

@@ -15,6 +15,8 @@ export interface CandidateContent {
   text: string;
   authorHandle?: string;
   url?: string;
+  displayName?: string;
+  bio?: string;
 }
 
 export interface AiConfig {

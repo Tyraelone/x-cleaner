@@ -2,7 +2,20 @@ import { extractCandidatesFromRoot } from "./selectors";
 import { fingerprintText } from "../shared/text";
 import type { CandidateContent } from "../shared/types";
 
-const seenFingerprints = new Set<string>();
+type RootNode = ParentNode & {
+  querySelectorAll(selectors: string): NodeListOf<Element>;
+};
+
+interface MutationObserverLike {
+  observe(target: Node, options: MutationObserverInit): void;
+  disconnect?: () => void;
+}
+
+export interface StartContentExtractionOptions {
+  root?: RootNode;
+  onCandidate?: (candidate: CandidateContent) => void;
+  observerFactory?: (callback: MutationCallback) => MutationObserverLike;
+}
 
 function fingerprintCandidate(candidate: CandidateContent): string {
   return [
@@ -13,56 +26,80 @@ function fingerprintCandidate(candidate: CandidateContent): string {
   ].join("|");
 }
 
-function recordCandidate(candidate: CandidateContent): void {
-  const fingerprint = fingerprintCandidate(candidate);
-
-  if (seenFingerprints.has(fingerprint)) {
-    return;
-  }
-
-  seenFingerprints.add(fingerprint);
+function isCandidateNode(node: Node): node is RootNode {
+  return "querySelectorAll" in node;
 }
 
-function scanRoot(root: ParentNode & { querySelectorAll(selectors: string): NodeListOf<Element> }): void {
-  for (const candidate of extractCandidatesFromRoot(root)) {
-    recordCandidate(candidate);
-  }
-}
+export function startContentExtraction(
+  options: StartContentExtractionOptions = {},
+): MutationObserverLike | undefined {
+  const root =
+    options.root ??
+    (typeof document === "undefined" ? undefined : document.body);
 
-function observeInsertedNodes(root: HTMLElement): void {
-  const observer = new MutationObserver((mutations) => {
+  if (!root) {
+    return undefined;
+  }
+
+  const seenFingerprints = new Set<string>();
+  const onCandidate = options.onCandidate ?? (() => {});
+  const observerFactory =
+    options.observerFactory ??
+    ((callback) => new MutationObserver(callback) as unknown as MutationObserverLike);
+
+  function recordCandidate(candidate: CandidateContent): void {
+    const fingerprint = fingerprintCandidate(candidate);
+
+    if (seenFingerprints.has(fingerprint)) {
+      return;
+    }
+
+    seenFingerprints.add(fingerprint);
+    onCandidate(candidate);
+  }
+
+  function scanRoot(node: RootNode): void {
+    for (const candidate of extractCandidatesFromRoot(node)) {
+      recordCandidate(candidate);
+    }
+  }
+
+  const observer = observerFactory((mutations) => {
     for (const mutation of mutations) {
       for (const node of mutation.addedNodes) {
-        if (node.nodeType !== Node.ELEMENT_NODE && node.nodeType !== Node.DOCUMENT_FRAGMENT_NODE) {
+        if (!isCandidateNode(node)) {
           continue;
         }
 
-        scanRoot(node as ParentNode & { querySelectorAll(selectors: string): NodeListOf<Element> });
+        scanRoot(node);
       }
     }
   });
+
+  scanRoot(root);
 
   observer.observe(root, {
     childList: true,
     subtree: true,
   });
+
+  return observer;
 }
 
-function bootstrap(): void {
-  const root = document.body;
+const globalDocument = typeof document === "undefined" ? undefined : document;
 
-  if (!root) {
-    return;
+if (globalDocument) {
+  if (globalDocument.readyState === "loading") {
+    globalDocument.addEventListener(
+      "DOMContentLoaded",
+      () => {
+        startContentExtraction();
+      },
+      { once: true },
+    );
+  } else {
+    startContentExtraction();
   }
-
-  scanRoot(root);
-  observeInsertedNodes(root);
-}
-
-if (document.readyState === "loading") {
-  document.addEventListener("DOMContentLoaded", bootstrap, { once: true });
-} else {
-  bootstrap();
 }
 
 export {};

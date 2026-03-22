@@ -33,6 +33,26 @@ describe("extractCandidatesFromRoot", () => {
     ]);
   });
 
+  it("extracts the outer tweet permalink when nested status links exist", () => {
+    const root = loadFixture("timeline-with-nested-status-link");
+    const candidates = extractCandidatesFromRoot(root);
+
+    expect(candidates).toContainEqual({
+      id: "https://x.com/alice/status/111",
+      type: "post",
+      text: "Outer tweet with a quoted tweet inside.",
+      authorHandle: "@alice",
+      url: "https://x.com/alice/status/111",
+    });
+    expect(candidates).toContainEqual({
+      id: "https://x.com/nested/status/999",
+      type: "post",
+      text: "Inner quoted tweet.",
+      authorHandle: "@nested",
+      url: "https://x.com/nested/status/999",
+    });
+  });
+
   it("extracts a reply item", () => {
     const root = loadFixture("reply-item");
 
@@ -57,6 +77,8 @@ describe("extractCandidatesFromRoot", () => {
         text: "Carol Chen Writer, builder, and coffee enthusiast.",
         authorHandle: "@carol",
         url: "https://x.com/carol",
+        displayName: "Carol Chen",
+        bio: "Writer, builder, and coffee enthusiast.",
       },
     ]);
   });
@@ -71,6 +93,8 @@ describe("extractCandidatesFromRoot", () => {
         text: "Dee Park Public speaker and product designer.",
         authorHandle: "@dee",
         url: "https://x.com/dee",
+        displayName: "Dee Park",
+        bio: "Public speaker and product designer.",
       },
     ]);
   });

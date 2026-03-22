@@ -1,0 +1,24 @@
+<article data-testid="tweet">
+  <header>
+    <a data-testid="User-Name" href="https://x.com/alice">
+      <span>Alice</span>
+      <span>@alice</span>
+    </a>
+  </header>
+  <div data-testid="tweetText">Outer tweet with a quoted tweet inside.</div>
+  <article data-testid="tweet">
+    <header>
+      <a data-testid="User-Name" href="https://x.com/nested">
+        <span>Nested</span>
+        <span>@nested</span>
+      </a>
+    </header>
+    <div data-testid="tweetText">Inner quoted tweet.</div>
+    <a href="https://x.com/nested/status/999">
+      <time datetime="2026-03-22T07:30:00.000Z"></time>
+    </a>
+  </article>
+  <a href="https://x.com/alice/status/111">
+    <time datetime="2026-03-22T08:30:00.000Z"></time>
+  </a>
+</article>
