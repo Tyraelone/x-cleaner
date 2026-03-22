@@ -16,75 +16,191 @@ interface ChromeStorageLike {
   };
 }
 
-function getChromeStorageArea(area: keyof ChromeStorageLike["storage"]): ChromeStorageArea {
+function getChromeStorageArea(
+  area: keyof ChromeStorageLike["storage"],
+): ChromeStorageArea | null {
   const chromeApi = globalThis as typeof globalThis & { chrome?: ChromeStorageLike };
   const storageArea = chromeApi.chrome?.storage[area];
 
-  if (!storageArea) {
-    throw new Error(`chrome.storage.${area} is not available`);
-  }
-
-  return storageArea;
+  return storageArea ?? null;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function extractStoredSettings(record: Record<string, unknown>): SettingsPatch {
-  const storedSettings = record[settingsStorageKey];
-
-  if (isRecord(storedSettings)) {
-    const { [settingsStorageKey]: _ignored, ...rest } = record;
-    return {
-      ...(rest as SettingsPatch),
-      ...(storedSettings as SettingsPatch),
-    };
-  }
-
-  return record as SettingsPatch;
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((entry) => typeof entry === "string");
 }
 
-export function mergeWithDefaults(partialSettings: SettingsPatch = {}): Settings {
+function sanitizeSettingsPatch(value: unknown): SettingsPatch {
+  if (!isRecord(value)) {
+    return {};
+  }
+
+  const patch: SettingsPatch = {};
+
+  if (isRecord(value.ai)) {
+    const aiPatch: SettingsPatch["ai"] = {};
+
+    if (typeof value.ai.enabled === "boolean") {
+      aiPatch.enabled = value.ai.enabled;
+    }
+
+    if (typeof value.ai.model === "string") {
+      aiPatch.model = value.ai.model;
+    }
+
+    if (Object.keys(aiPatch).length > 0) {
+      patch.ai = aiPatch;
+    }
+  }
+
+  if (
+    typeof value.confidenceThreshold === "number" &&
+    Number.isFinite(value.confidenceThreshold)
+  ) {
+    patch.confidenceThreshold = value.confidenceThreshold;
+  }
+
+  if (isRecord(value.categories)) {
+    const categories: NonNullable<SettingsPatch["categories"]> = {};
+
+    for (const category of Object.keys(createDefaultSettings().categories) as Array<
+      keyof Settings["categories"]
+    >) {
+      if (typeof value.categories[category] === "boolean") {
+        categories[category] = value.categories[category];
+      }
+    }
+
+    if (Object.keys(categories).length > 0) {
+      patch.categories = categories;
+    }
+  }
+
+  if (isStringArray(value.allowlist)) {
+    patch.allowlist = [...value.allowlist];
+  }
+
+  if (isStringArray(value.blacklist)) {
+    patch.blacklist = [...value.blacklist];
+  }
+
+  if (isStringArray(value.customKeywords)) {
+    patch.customKeywords = [...value.customKeywords];
+  }
+
+  return patch;
+}
+
+function mergeSettings(base: Settings, patch: SettingsPatch): Settings {
+  return mergeWithDefaults({
+    ai: {
+      ...base.ai,
+      ...(patch.ai ?? {}),
+    },
+    confidenceThreshold: patch.confidenceThreshold ?? base.confidenceThreshold,
+    categories: {
+      ...base.categories,
+      ...(patch.categories ?? {}),
+    },
+    allowlist: patch.allowlist ?? base.allowlist,
+    blacklist: patch.blacklist ?? base.blacklist,
+    customKeywords: patch.customKeywords ?? base.customKeywords,
+  });
+}
+
+function extractStoredSettings(record: Record<string, unknown>): unknown {
+  return record[settingsStorageKey];
+}
+
+export function mergeWithDefaults(partialSettings: unknown = {}): Settings {
   const defaults = createDefaultSettings();
+  const sanitizedPatch = sanitizeSettingsPatch(partialSettings);
 
   return {
     ai: {
       ...defaults.ai,
-      ...(partialSettings.ai ?? {}),
+      ...(sanitizedPatch.ai ?? {}),
     },
     confidenceThreshold:
-      partialSettings.confidenceThreshold ?? defaults.confidenceThreshold,
+      sanitizedPatch.confidenceThreshold ?? defaults.confidenceThreshold,
     categories: {
       ...defaults.categories,
-      ...(partialSettings.categories ?? {}),
+      ...(sanitizedPatch.categories ?? {}),
     },
-    allowlist: [...(partialSettings.allowlist ?? defaults.allowlist)],
-    blacklist: [...(partialSettings.blacklist ?? defaults.blacklist)],
-    customKeywords: [...(partialSettings.customKeywords ?? defaults.customKeywords)],
+    allowlist: [...(sanitizedPatch.allowlist ?? defaults.allowlist)],
+    blacklist: [...(sanitizedPatch.blacklist ?? defaults.blacklist)],
+    customKeywords: [...(sanitizedPatch.customKeywords ?? defaults.customKeywords)],
   };
 }
 
 export async function getSettings(): Promise<Settings> {
-  const rawSettings = await getChromeStorageArea("sync").get(null);
-  return mergeWithDefaults(extractStoredSettings(rawSettings));
+  const storageArea = getChromeStorageArea("sync");
+
+  if (!storageArea) {
+    return createDefaultSettings();
+  }
+
+  try {
+    const rawSettings = await storageArea.get(settingsStorageKey);
+    return mergeWithDefaults(
+      isRecord(rawSettings) ? extractStoredSettings(rawSettings) : undefined,
+    );
+  } catch {
+    return createDefaultSettings();
+  }
 }
 
 export async function saveSettings(settings: SettingsPatch): Promise<void> {
-  const mergedSettings = mergeWithDefaults(settings);
+  const storageArea = getChromeStorageArea("sync");
 
-  await getChromeStorageArea("sync").set(mergedSettings);
+  if (!storageArea) {
+    return;
+  }
+
+  const currentSettings = await getSettings();
+  const mergedSettings = mergeSettings(currentSettings, settings);
+
+  try {
+    await storageArea.set({
+      [settingsStorageKey]: mergedSettings,
+    });
+  } catch {
+    // Ignore storage write failures so callers can continue safely.
+  }
 }
 
 export async function getApiKey(): Promise<string | null> {
-  const stored = await getChromeStorageArea("local").get(apiKeyStorageKey);
-  const apiKey = stored[apiKeyStorageKey];
+  const storageArea = getChromeStorageArea("local");
 
-  return typeof apiKey === "string" && apiKey.length > 0 ? apiKey : null;
+  if (!storageArea) {
+    return null;
+  }
+
+  try {
+    const stored = await storageArea.get(apiKeyStorageKey);
+    const apiKey = stored[apiKeyStorageKey];
+
+    return typeof apiKey === "string" && apiKey.length > 0 ? apiKey : null;
+  } catch {
+    return null;
+  }
 }
 
 export async function saveApiKey(key: string): Promise<void> {
-  await getChromeStorageArea("local").set({
-    [apiKeyStorageKey]: key,
-  });
+  const storageArea = getChromeStorageArea("local");
+
+  if (!storageArea) {
+    return;
+  }
+
+  try {
+    await storageArea.set({
+      [apiKeyStorageKey]: key,
+    });
+  } catch {
+    // Ignore storage write failures so callers can continue safely.
+  }
 }
