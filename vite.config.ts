@@ -8,7 +8,7 @@ export default defineConfig({
       input: {
         background: "src/background/index.ts",
         content: "src/content/index.ts",
-        options: "src/options/index.html",
+        options: "options.html",
       },
       output: {
         entryFileNames: "[name].js",

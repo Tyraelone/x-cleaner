@@ -1,32 +1,37 @@
 import type { Settings } from "./types";
 
-export const builtInCategories = {
+export const builtInCategories = Object.freeze({
   hate: true,
   harassment: true,
   sexual: true,
   violence: true,
   spam: true,
-} as const;
+} as const);
 
 export const defaultConfidenceThreshold = 0.8;
 
-export const defaultAllowlist: string[] = [];
-export const defaultBlacklist: string[] = [];
-export const defaultCustomKeywords: string[] = [];
-
-export const defaultSettings: Settings = {
-  ai: {
+export const defaultSettings = Object.freeze({
+  ai: Object.freeze({
     enabled: false,
-  },
+  }),
   confidenceThreshold: defaultConfidenceThreshold,
-  categories: {
-    hate: builtInCategories.hate,
-    harassment: builtInCategories.harassment,
-    sexual: builtInCategories.sexual,
-    violence: builtInCategories.violence,
-    spam: builtInCategories.spam,
-  },
-  allowlist: defaultAllowlist,
-  blacklist: defaultBlacklist,
-  customKeywords: defaultCustomKeywords,
-};
+  categories: builtInCategories,
+  allowlist: Object.freeze([]) as readonly string[],
+  blacklist: Object.freeze([]) as readonly string[],
+  customKeywords: Object.freeze([]) as readonly string[],
+}) satisfies Readonly<Settings>;
+
+export function createDefaultSettings(): Settings {
+  return {
+    ai: {
+      enabled: defaultSettings.ai.enabled,
+    },
+    confidenceThreshold: defaultSettings.confidenceThreshold,
+    categories: {
+      ...defaultSettings.categories,
+    },
+    allowlist: [],
+    blacklist: [],
+    customKeywords: [],
+  };
+}

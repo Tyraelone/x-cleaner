@@ -14,5 +14,5 @@
       "run_at": "document_idle"
     }
   ],
-  "options_page": "src/options/index.html"
+  "options_page": "options.html"
 }
