@@ -20,8 +20,13 @@ type StructuredClassificationRequest = {
       text: string;
     }>;
   }>;
-  response_format: {
-    type: "json_object";
+  text: {
+    format: {
+      type: "json_schema";
+      name: string;
+      strict: true;
+      schema: Record<string, unknown>;
+    };
   };
 };
 
@@ -65,12 +70,31 @@ function isRuleMatch(value: unknown): value is RuleMatch {
   return true;
 }
 
-function normalizeMatches(value: unknown): RuleMatch[] {
+function normalizeMatches(value: unknown): RuleMatch[] | null {
   if (!Array.isArray(value)) {
-    return [];
+    return null;
   }
 
-  return value.filter(isRuleMatch);
+  const matches: RuleMatch[] = [];
+
+  for (const entry of value) {
+    if (!isRuleMatch(entry)) {
+      return null;
+    }
+
+    matches.push(entry);
+  }
+
+  return matches;
+}
+
+function isConfidenceInRange(value: unknown): value is number {
+  return (
+    typeof value === "number" &&
+    Number.isFinite(value) &&
+    value >= 0 &&
+    value <= 1
+  );
 }
 
 function normalizeProviderOutput(value: unknown): RawAiClassificationResult | null {
@@ -78,10 +102,7 @@ function normalizeProviderOutput(value: unknown): RawAiClassificationResult | nu
     return null;
   }
 
-  const confidence =
-    typeof value.confidence === "number" && Number.isFinite(value.confidence)
-      ? value.confidence
-      : null;
+  const confidence = isConfidenceInRange(value.confidence) ? value.confidence : null;
 
   if (confidence === null) {
     return null;
@@ -99,11 +120,17 @@ function normalizeProviderOutput(value: unknown): RawAiClassificationResult | nu
       return null;
     }
 
+    const matches = normalizeMatches(value.matches);
+
+    if (matches === null) {
+      return null;
+    }
+
     return {
       blocked: true,
       category,
       confidence,
-      matches: normalizeMatches(value.matches),
+      matches,
     };
   }
 
@@ -122,11 +149,17 @@ function normalizeProviderOutput(value: unknown): RawAiClassificationResult | nu
     }
 
     if (isFilterCategory(value.label)) {
+      const matches = normalizeMatches(value.matches);
+
+      if (matches === null) {
+        return null;
+      }
+
       return {
         blocked: true,
         category: value.label,
         confidence,
-        matches: normalizeMatches(value.matches),
+        matches,
       };
     }
   }
@@ -157,47 +190,42 @@ function buildMockProviderResponse(text: string): RawAiClassificationResult {
   };
 }
 
-function extractStructuredProviderOutput(value: unknown): unknown {
+function extractResponsesOutputText(value: unknown): string | null {
   if (!isRecord(value)) {
-    return value;
+    return null;
   }
 
   const rawOutput = value.output;
 
-  if (isRecord(rawOutput)) {
-    return {
-      ...rawOutput,
-      ...(typeof value.confidence === "number" ? { confidence: value.confidence } : {}),
-    };
+  if (typeof rawOutput === "string") {
+    return rawOutput;
   }
 
-  if (typeof rawOutput === "string") {
-    try {
-      const parsedOutput = JSON.parse(rawOutput) as unknown;
+  if (!Array.isArray(rawOutput)) {
+    return null;
+  }
 
-      if (isRecord(parsedOutput)) {
-        return {
-          ...parsedOutput,
-          ...(typeof value.confidence === "number" ? { confidence: value.confidence } : {}),
-        };
+  for (const outputItem of rawOutput) {
+    if (!isRecord(outputItem) || outputItem.type !== "message") {
+      continue;
+    }
+
+    if (!Array.isArray(outputItem.content)) {
+      continue;
+    }
+
+    for (const contentItem of outputItem.content) {
+      if (
+        isRecord(contentItem) &&
+        contentItem.type === "output_text" &&
+        typeof contentItem.text === "string"
+      ) {
+        return contentItem.text;
       }
-
-      return parsedOutput;
-    } catch {
-      return rawOutput;
     }
   }
 
-  if (
-    "blocked" in value ||
-    "label" in value ||
-    "confidence" in value ||
-    "matches" in value
-  ) {
-    return value;
-  }
-
-  return value;
+  return null;
 }
 
 function buildStructuredClassificationRequest(
@@ -227,8 +255,78 @@ function buildStructuredClassificationRequest(
         ],
       },
     ],
-    response_format: {
-      type: "json_object",
+    text: {
+      format: {
+        type: "json_schema",
+        name: "ai_classification",
+        strict: true,
+        schema: {
+          type: "object",
+          oneOf: [
+            {
+              type: "object",
+              properties: {
+                blocked: {
+                  const: false,
+                },
+                confidence: {
+                  type: "number",
+                  minimum: 0,
+                  maximum: 1,
+                },
+                matches: {
+                  type: "array",
+                  maxItems: 0,
+                },
+              },
+              required: ["blocked", "confidence", "matches"],
+              additionalProperties: false,
+            },
+            {
+              type: "object",
+              properties: {
+                blocked: {
+                  const: true,
+                },
+                category: {
+                  type: "string",
+                  enum: ["hate", "harassment", "sexual", "violence", "spam"],
+                },
+                confidence: {
+                  type: "number",
+                  minimum: 0,
+                  maximum: 1,
+                },
+                matches: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    properties: {
+                      category: {
+                        type: "string",
+                        enum: ["hate", "harassment", "sexual", "violence", "spam"],
+                      },
+                      matchedText: {
+                        type: "string",
+                      },
+                      startIndex: {
+                        type: "number",
+                      },
+                      endIndex: {
+                        type: "number",
+                      },
+                    },
+                    required: ["category", "matchedText"],
+                    additionalProperties: false,
+                  },
+                },
+              },
+              required: ["blocked", "category", "confidence", "matches"],
+              additionalProperties: false,
+            },
+          ],
+        },
+      },
     },
   };
 }
@@ -251,8 +349,18 @@ async function runRealProvider(
       return createAllowResult();
     }
 
-    const payload = extractStructuredProviderOutput(await response.json());
-    return normalizeProviderOutput(payload) ?? createAllowResult();
+    const payload = await response.json();
+    const outputText = extractResponsesOutputText(payload);
+
+    if (!outputText) {
+      return createAllowResult();
+    }
+
+    try {
+      return normalizeProviderOutput(JSON.parse(outputText) as unknown) ?? createAllowResult();
+    } catch {
+      return createAllowResult();
+    }
   } catch {
     return createAllowResult();
   }

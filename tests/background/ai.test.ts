@@ -60,19 +60,31 @@ describe("classifyWithProvider", () => {
     const fetchImpl = vi.fn().mockResolvedValue({
       ok: true,
       json: vi.fn().mockResolvedValue({
-        output: {
-          blocked: true,
-          category: "spam",
-          matches: [
-            {
-              category: "spam",
-              matchedText: "follow me",
-              startIndex: 10,
-              endIndex: 19,
-            },
-          ],
-        },
-        confidence: 0.93,
+        output: [
+          {
+            type: "message",
+            role: "assistant",
+            content: [
+              {
+                type: "output_text",
+                text: JSON.stringify({
+                  blocked: true,
+                  category: "spam",
+                  confidence: 0.93,
+                  matches: [
+                    {
+                      category: "spam",
+                      matchedText: "follow me",
+                      startIndex: 10,
+                      endIndex: 19,
+                    },
+                  ],
+                }),
+                annotations: [],
+              },
+            ],
+          },
+        ],
       }),
     });
 
@@ -103,10 +115,15 @@ describe("classifyWithProvider", () => {
     expect(url).toBe("https://api.openai.com/v1/responses");
     expect(JSON.parse(init.body as string)).toMatchObject({
       model: "gpt-4o-mini",
-      response_format: {
-        type: "json_object",
+      text: {
+        format: {
+          type: "json_schema",
+          name: "ai_classification",
+          strict: true,
+        },
       },
     });
+    expect(JSON.parse(init.body as string)).not.toHaveProperty("response_format");
   });
 
   it("falls back to a non-blocking result when fetch fails", async () => {
@@ -137,6 +154,94 @@ describe("classifyWithProvider", () => {
     const result = await classifyWithProvider(
       {
         enabled: true,
+        model: "gpt-4o-mini",
+      } as any,
+      "please follow me now",
+      fetchImpl,
+    );
+
+    expect(result).toEqual({
+      blocked: false,
+      confidence: 0,
+      matches: [],
+    });
+  });
+
+  it("falls back to a non-blocking result for out-of-range confidence", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue({
+      ok: true,
+      json: vi.fn().mockResolvedValue({
+        output: [
+          {
+            type: "message",
+            role: "assistant",
+            content: [
+              {
+                type: "output_text",
+                text: JSON.stringify({
+                  blocked: true,
+                  category: "spam",
+                  confidence: 1.5,
+                  matches: [],
+                }),
+                annotations: [],
+              },
+            ],
+          },
+        ],
+      }),
+    });
+
+    const result = await classifyWithProvider(
+      {
+        enabled: true,
+        provider: "openai",
+        model: "gpt-4o-mini",
+      } as any,
+      "please follow me now",
+      fetchImpl,
+    );
+
+    expect(result).toEqual({
+      blocked: false,
+      confidence: 0,
+      matches: [],
+    });
+  });
+
+  it("falls back to a non-blocking result for malformed blocked responses", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue({
+      ok: true,
+      json: vi.fn().mockResolvedValue({
+        output: [
+          {
+            type: "message",
+            role: "assistant",
+            content: [
+              {
+                type: "output_text",
+                text: JSON.stringify({
+                  blocked: true,
+                  confidence: 0.93,
+                  matches: [
+                    {
+                      category: "not-a-real-category",
+                      matchedText: "follow me",
+                    },
+                  ],
+                }),
+                annotations: [],
+              },
+            ],
+          },
+        ],
+      }),
+    });
+
+    const result = await classifyWithProvider(
+      {
+        enabled: true,
+        provider: "openai",
         model: "gpt-4o-mini",
       } as any,
       "please follow me now",
@@ -236,5 +341,78 @@ describe("background listener", () => {
     expect(classifyWithProviderMock).toHaveBeenCalledTimes(1);
     expect(getSettingsMock).toHaveBeenCalledTimes(1);
     expect(getApiKeyMock).not.toHaveBeenCalled();
+  });
+
+  it("short-circuits to a non-blocking response when openai has no api key", async () => {
+    const addListener = vi.fn();
+    const classifyWithProviderMock = vi.fn();
+    const getSettingsMock = vi.fn().mockResolvedValue({
+      ...defaultSettings,
+      ai: {
+        enabled: true,
+        provider: "openai",
+        model: "gpt-4o-mini",
+      },
+    });
+    const getApiKeyMock = vi.fn().mockResolvedValue(null);
+
+    let registeredListener:
+      | ((message: unknown, sender: unknown, sendResponse: (response: unknown) => void) => boolean | void)
+      | undefined;
+
+    vi.stubGlobal("chrome", {
+      runtime: {
+        onMessage: {
+          addListener: (listener: typeof registeredListener) => {
+            registeredListener = listener;
+            addListener(listener);
+          },
+        },
+      },
+    });
+
+    vi.doMock("../../src/background/ai", () => ({
+      classifyWithProvider: classifyWithProviderMock,
+    }));
+    vi.doMock("../../src/shared/storage", () => ({
+      getSettings: getSettingsMock,
+      getApiKey: getApiKeyMock,
+    }));
+
+    await import("../../src/background/index");
+
+    const sendResponse = vi.fn();
+    const keepAlive = registeredListener?.(
+      {
+        type: REQUEST_AI_CLASSIFICATION,
+        payload: {
+          requestId: "request-2",
+          candidate: {
+            id: "candidate-2",
+            type: "post",
+            text: "candidate text should not leave the worker",
+          },
+        },
+      },
+      {},
+      sendResponse,
+    );
+
+    expect(keepAlive).toBe(true);
+
+    await vi.waitFor(() =>
+      expect(sendResponse).toHaveBeenCalledWith({
+        type: RAW_AI_CLASSIFICATION_RESULT,
+        payload: {
+          requestId: "request-2",
+          blocked: false,
+          confidence: 0,
+          matches: [],
+        },
+      }),
+    );
+    expect(classifyWithProviderMock).not.toHaveBeenCalled();
+    expect(getSettingsMock).toHaveBeenCalledTimes(1);
+    expect(getApiKeyMock).toHaveBeenCalledTimes(1);
   });
 });

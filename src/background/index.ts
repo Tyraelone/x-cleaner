@@ -72,6 +72,28 @@ async function handleAiClassification(
   message: AiClassificationRequestMessage,
 ): Promise<RawAiClassificationResultMessage> {
   const settings = message.payload.settings ?? (await getSettings());
+  if (settings.ai.enabled && settings.ai.provider === "openai") {
+    const apiKey = await getApiKey();
+
+    if (!apiKey) {
+      return createAllowResponse(message.payload.requestId);
+    }
+
+    const result = await classifyWithProvider(
+      settings.ai,
+      message.payload.candidate.text,
+      createAuthorizedFetch(apiKey, fetch),
+    );
+
+    return {
+      type: RAW_AI_CLASSIFICATION_RESULT,
+      payload: {
+        requestId: message.payload.requestId,
+        ...result,
+      },
+    };
+  }
+
   const apiKey =
     settings.ai.enabled && settings.ai.provider !== "mock"
       ? await getApiKey()
