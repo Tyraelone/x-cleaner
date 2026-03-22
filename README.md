@@ -2,6 +2,11 @@
 
 TypeScript scaffold for the X Cleaner Chrome extension workspace.
 
+## Setup
+
+- Node.js 18 or newer
+- `npm install`
+
 ## Scripts
 
 - `npm run dev` - build in watch mode with Vite
