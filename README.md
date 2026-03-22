@@ -100,4 +100,4 @@ npm run build
 
 ## Status
 
-`v0.1.3` fixes the missing content-to-background AI filtering bridge so enabling AI review now actually classifies and collapses matching X content.
+`v0.1.4` fixes the packaged content-script loading issue by emitting single-file ASCII-safe extension scripts that Chrome can load reliably.

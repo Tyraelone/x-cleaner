@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "X Cleaner",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "Filter content on X with local rules and optional AI assistance.",
   "permissions": ["storage"],
   "background": {
