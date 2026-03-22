@@ -45,10 +45,12 @@ export interface RuleMatch {
   endIndex?: number;
 }
 
+export type ClassificationSource = "allowlist" | "blacklist" | "local" | "ai";
+
 export interface ClassificationDecision {
   blocked: boolean;
   category?: FilterCategory;
   confidence: number;
   matches: RuleMatch[];
-  source: "local" | "ai";
+  source: ClassificationSource;
 }
