@@ -3,11 +3,19 @@ import type { CandidateContent, ContentType } from "../shared/types";
 const TWEET_ARTICLE_SELECTOR = 'article[data-testid="tweet"]';
 const TWEET_TEXT_SELECTOR = '[data-testid="tweetText"]';
 const USER_NAME_SELECTOR = '[data-testid="User-Name"]';
+const PROFILE_HEADER_SELECTOR = 'header[data-testid="ProfileHeader"]';
 const PROFILE_NAME_SELECTOR = '[data-testid="UserName"]';
-const USER_DESCRIPTION_SELECTOR = '[data-testid="UserDescription"]';
-const HOVER_CARD_SELECTOR = '[data-testid="HoverCard"]';
+const PROFILE_NAME_DISPLAY_SELECTOR = '[data-testid="UserNameDisplayName"]';
+const PROFILE_NAME_HANDLE_SELECTOR = '[data-testid="UserNameHandle"]';
+const PROFILE_BIO_SELECTOR = '[data-testid="UserDescription"]';
+const PROFILE_LINK_SELECTOR = 'a[data-testid="UserProfileLink"]';
+const HOVER_CARD_SELECTOR = 'div[data-testid="HoverCard"]';
+const HOVER_CARD_NAME_SELECTOR = '[data-testid="UserName"]';
+const HOVER_CARD_NAME_DISPLAY_SELECTOR = '[data-testid="UserNameDisplayName"]';
+const HOVER_CARD_NAME_HANDLE_SELECTOR = '[data-testid="UserNameHandle"]';
+const HOVER_CARD_BIO_SELECTOR = '[data-testid="UserDescription"]';
+const HOVER_CARD_LINK_SELECTOR = 'a[data-testid="UserProfileLink"]';
 const REPLY_CONTAINER_SELECTOR = '[data-testid="reply"]';
-const PROFILE_LINK_SELECTOR = 'a[href^="https://x.com/"]';
 const STATUS_LINK_SELECTOR = 'a[href*="/status/"]';
 
 type QueryRoot = Document | Element | DocumentFragment | ShadowRoot;
@@ -38,7 +46,7 @@ function extractHandle(text: string): string | undefined {
   return match?.[0];
 }
 
-function extractNameParts(nameElement: Element | null): {
+function extractNameParts(nameElement: Element | null, scope: "profile" | "hover"): {
   displayName?: string;
   handle?: string;
 } {
@@ -46,11 +54,16 @@ function extractNameParts(nameElement: Element | null): {
     return {};
   }
 
-  const spans = Array.from(nameElement.querySelectorAll("span")).map((span) =>
-    textFromElement(span),
-  );
-  const displayName = spans[0] || textFromElement(nameElement);
-  const handle = spans.find((spanText) => spanText.startsWith("@")) ?? extractHandle(textFromElement(nameElement));
+  const displaySelector =
+    scope === "profile" ? PROFILE_NAME_DISPLAY_SELECTOR : HOVER_CARD_NAME_DISPLAY_SELECTOR;
+  const handleSelector =
+    scope === "profile" ? PROFILE_NAME_HANDLE_SELECTOR : HOVER_CARD_NAME_HANDLE_SELECTOR;
+  const displayName =
+    textFromElement(findFirstElement(nameElement, [displaySelector])) ||
+    textFromElement(nameElement);
+  const handle =
+    textFromElement(findFirstElement(nameElement, [handleSelector])) ||
+    extractHandle(textFromElement(nameElement));
 
   return {
     displayName: displayName || undefined,
@@ -100,16 +113,31 @@ function extractTweetCandidate(article: Element): CandidateContent | null {
   return createCandidate(id, type, text, authorHandle, url);
 }
 
-function extractProfileCandidate(root: QueryRoot, container: Element): CandidateContent | null {
-  const nameElement = findFirstElement(container, [PROFILE_NAME_SELECTOR]);
-  const bioElement = findFirstElement(container, [USER_DESCRIPTION_SELECTOR]);
-  const link = findFirstElement(container, [PROFILE_LINK_SELECTOR]);
-  const { displayName, handle } = extractNameParts(nameElement);
+function extractProfileCandidate(
+  container: Element,
+  scope: "profile" | "hover",
+): CandidateContent | null {
+  const nameElement =
+    findFirstElement(
+      container,
+      [scope === "profile" ? PROFILE_NAME_SELECTOR : HOVER_CARD_NAME_SELECTOR],
+    );
+  const bioElement =
+    findFirstElement(
+      container,
+      [scope === "profile" ? PROFILE_BIO_SELECTOR : HOVER_CARD_BIO_SELECTOR],
+    );
+  const link =
+    findFirstElement(
+      container,
+      [scope === "profile" ? PROFILE_LINK_SELECTOR : HOVER_CARD_LINK_SELECTOR],
+    );
+  const { displayName, handle } = extractNameParts(nameElement, scope);
   const bio = textFromElement(bioElement);
   const authorHandle = handle;
   const text = [displayName, bio].filter(Boolean).join(" ");
   const url = extractUrl(link);
-  const id = url ?? `profile:${collapseWhitespace(text)}`;
+  const id = url ?? `${scope}:${collapseWhitespace(text)}`;
 
   return createCandidate(id, "profile", text, authorHandle, url);
 }
@@ -125,18 +153,8 @@ export function extractCandidatesFromRoot(root: QueryRoot): CandidateContent[] {
     }
   }
 
-  for (const bioElement of root.querySelectorAll(USER_DESCRIPTION_SELECTOR)) {
-    const section = bioElement.closest("section");
-
-    if (!section || section.closest(HOVER_CARD_SELECTOR)) {
-      continue;
-    }
-
-    if (!section.querySelector(PROFILE_NAME_SELECTOR)) {
-      continue;
-    }
-
-    const candidate = extractProfileCandidate(root, section);
+  for (const header of root.querySelectorAll(PROFILE_HEADER_SELECTOR)) {
+    const candidate = extractProfileCandidate(header, "profile");
 
     if (candidate) {
       candidates.push(candidate);
@@ -144,7 +162,7 @@ export function extractCandidatesFromRoot(root: QueryRoot): CandidateContent[] {
   }
 
   for (const hoverCard of root.querySelectorAll(HOVER_CARD_SELECTOR)) {
-    const candidate = extractProfileCandidate(root, hoverCard);
+    const candidate = extractProfileCandidate(hoverCard, "hover");
 
     if (candidate) {
       candidates.push(candidate);

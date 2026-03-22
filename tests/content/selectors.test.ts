@@ -1,27 +1,26 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+
 import { JSDOM } from "jsdom";
 import { describe, expect, it } from "vitest";
 
 import { extractCandidatesFromRoot } from "../../src/content/selectors";
 
-function createRoot(markup: string): HTMLElement {
-  const dom = new JSDOM(`<!doctype html><body>${markup}</body>`);
+function loadFixture(name: string): HTMLElement {
+  const path = resolve(
+    process.cwd(),
+    "tests/content/fixtures",
+    `${name}.html`,
+  );
+  const dom = new JSDOM(
+    `<!doctype html><body>${readFileSync(path, "utf8")}</body>`,
+  );
   return dom.window.document.body;
 }
 
 describe("extractCandidatesFromRoot", () => {
   it("extracts a timeline tweet", () => {
-    const root = createRoot(`
-      <article data-testid="tweet">
-        <header>
-          <a data-testid="User-Name" href="https://x.com/alice">
-            <span>Alice</span>
-            <span>@alice</span>
-          </a>
-        </header>
-        <div data-testid="tweetText">Hello from the timeline!</div>
-        <a href="https://x.com/alice/status/111"><time datetime="2026-03-22T08:30:00.000Z"></time></a>
-      </article>
-    `);
+    const root = loadFixture("timeline-tweet");
 
     expect(extractCandidatesFromRoot(root)).toEqual([
       {
@@ -35,20 +34,7 @@ describe("extractCandidatesFromRoot", () => {
   });
 
   it("extracts a reply item", () => {
-    const root = createRoot(`
-      <div data-testid="reply">
-        <article data-testid="tweet">
-          <header>
-            <a data-testid="User-Name" href="https://x.com/bob">
-              <span>Bob</span>
-              <span>@bob</span>
-            </a>
-          </header>
-          <div data-testid="tweetText">I agree with this reply.</div>
-          <a href="https://x.com/bob/status/222"><time datetime="2026-03-22T09:00:00.000Z"></time></a>
-        </article>
-      </div>
-    `);
+    const root = loadFixture("reply-item");
 
     expect(extractCandidatesFromRoot(root)).toEqual([
       {
@@ -62,16 +48,7 @@ describe("extractCandidatesFromRoot", () => {
   });
 
   it("extracts a profile header with bio", () => {
-    const root = createRoot(`
-      <section>
-        <div data-testid="UserName">
-          <span>Carol Chen</span>
-          <span>@carol</span>
-        </div>
-        <div data-testid="UserDescription">Writer, builder, and coffee enthusiast.</div>
-        <a href="https://x.com/carol">Profile</a>
-      </section>
-    `);
+    const root = loadFixture("profile-header");
 
     expect(extractCandidatesFromRoot(root)).toEqual([
       {
@@ -85,16 +62,7 @@ describe("extractCandidatesFromRoot", () => {
   });
 
   it("extracts a hover card with display name and bio", () => {
-    const root = createRoot(`
-      <div data-testid="HoverCard">
-        <div data-testid="UserName">
-          <span>Dee Park</span>
-          <span>@dee</span>
-        </div>
-        <div data-testid="UserDescription">Public speaker and product designer.</div>
-        <a href="https://x.com/dee">View profile</a>
-      </div>
-    `);
+    const root = loadFixture("hover-card");
 
     expect(extractCandidatesFromRoot(root)).toEqual([
       {
