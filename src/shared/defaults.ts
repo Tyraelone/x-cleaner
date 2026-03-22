@@ -21,17 +21,25 @@ export const defaultSettings = Object.freeze({
   customKeywords: Object.freeze([]) as readonly string[],
 }) satisfies Readonly<Settings>;
 
+function createEmptyList(): string[] {
+  return [];
+}
+
+function createDefaultCategories(): Settings["categories"] {
+  return {
+    ...defaultSettings.categories,
+  };
+}
+
 export function createDefaultSettings(): Settings {
   return {
     ai: {
       enabled: defaultSettings.ai.enabled,
     },
     confidenceThreshold: defaultSettings.confidenceThreshold,
-    categories: {
-      ...defaultSettings.categories,
-    },
-    allowlist: [],
-    blacklist: [],
-    customKeywords: [],
+    categories: createDefaultCategories(),
+    allowlist: createEmptyList(),
+    blacklist: createEmptyList(),
+    customKeywords: createEmptyList(),
   };
 }

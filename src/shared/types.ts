@@ -29,6 +29,15 @@ export interface Settings {
   customKeywords: string[];
 }
 
+export type SettingsPatch = {
+  ai?: Partial<AiConfig>;
+  confidenceThreshold?: number;
+  categories?: Partial<Record<FilterCategory, boolean>>;
+  allowlist?: string[];
+  blacklist?: string[];
+  customKeywords?: string[];
+};
+
 export interface RuleMatch {
   category: FilterCategory;
   matchedText: string;
