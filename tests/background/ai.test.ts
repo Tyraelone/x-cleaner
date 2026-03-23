@@ -126,25 +126,30 @@ describe("classifyWithProvider", () => {
     expect(JSON.parse(init.body as string)).not.toHaveProperty("response_format");
   });
 
-  it("requests a chat completion from volcengine ark and normalizes it", async () => {
+  it("requests a responses API call from volcengine ark and normalizes it", async () => {
     const fetchImpl = vi.fn().mockResolvedValue({
       ok: true,
       json: vi.fn().mockResolvedValue({
-        choices: [
+        output: [
           {
-            message: {
-              content: JSON.stringify({
-                blocked: true,
-                category: "harassment",
-                confidence: 0.88,
-                matches: [
-                  {
-                    category: "harassment",
-                    matchedText: "idiot",
-                  },
-                ],
-              }),
-            },
+            type: "message",
+            role: "assistant",
+            content: [
+              {
+                type: "output_text",
+                text: JSON.stringify({
+                  blocked: true,
+                  category: "harassment",
+                  confidence: 0.88,
+                  matches: [
+                    {
+                      category: "harassment",
+                      matchedText: "idiot",
+                    },
+                  ],
+                }),
+              },
+            ],
           },
         ],
       }),
@@ -173,14 +178,18 @@ describe("classifyWithProvider", () => {
     });
     expect(fetchImpl).toHaveBeenCalledTimes(1);
     const [url, init] = fetchImpl.mock.calls[0];
-    expect(url).toBe("https://operator.las.cn-beijing.volces.com/api/v1/chat/completions");
+    expect(url).toBe("https://ark.cn-beijing.volces.com/api/v3/responses");
     expect(JSON.parse(init.body as string)).toMatchObject({
       model: "doubao-seed-1-6-250615",
-      messages: expect.arrayContaining([
+      input: expect.arrayContaining([
         expect.objectContaining({ role: "system" }),
-        expect.objectContaining({ role: "user", content: "you are an idiot" }),
+        expect.objectContaining({
+          role: "user",
+          content: [{ type: "input_text", text: "you are an idiot" }],
+        }),
       ]),
     });
+    expect(JSON.parse(init.body as string)).not.toHaveProperty("response_format");
   });
 
   it("falls back to a non-blocking result when fetch fails", async () => {
