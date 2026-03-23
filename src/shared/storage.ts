@@ -19,10 +19,14 @@ interface ChromeStorageLike {
 function getChromeStorageArea(
   area: keyof ChromeStorageLike["storage"],
 ): ChromeStorageArea | null {
-  const chromeApi = globalThis as typeof globalThis & { chrome?: ChromeStorageLike };
-  const storageArea = chromeApi.chrome?.storage[area];
+  try {
+    const chromeApi = globalThis as typeof globalThis & { chrome?: ChromeStorageLike };
+    const storageArea = chromeApi.chrome?.storage[area];
 
-  return storageArea ?? null;
+    return storageArea ?? null;
+  } catch {
+    return null;
+  }
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

@@ -284,6 +284,8 @@ describe("content bootstrap", () => {
 
     expect(dom.window.document.querySelector("button")).toBeTruthy();
     expect(dom.window.document.body.textContent).toContain("Filtered spam");
+    expect(dom.window.document.body.textContent).toContain("AI review flagged this content");
+    expect(dom.window.document.body.textContent).not.toContain("hello");
   });
 
   it("collapses blacklisted content through the bootstrap classification flow", async () => {
@@ -318,5 +320,43 @@ describe("content bootstrap", () => {
 
     expect(dom.window.document.querySelector("button")).toBeTruthy();
     expect(dom.window.document.body.textContent).toContain("Expand to review");
+  });
+
+  it("ignores invalidated extension context errors from ai messaging", async () => {
+    const dom = createDom(fixture("timeline-tweet"));
+    const sendMessage = vi
+      .fn()
+      .mockRejectedValue(new Error("Extension context invalidated."));
+
+    vi.stubGlobal("document", dom.window.document);
+    vi.stubGlobal("MutationObserver", FakeMutationObserver as unknown as typeof MutationObserver);
+    vi.stubGlobal("chrome", {
+      runtime: {
+        sendMessage,
+      },
+      storage: {
+        sync: {
+          get: vi.fn().mockResolvedValue({
+            settings: {
+              ai: {
+                enabled: true,
+                provider: "mock",
+              },
+            },
+          }),
+          set: vi.fn(),
+        },
+        local: {
+          get: vi.fn().mockResolvedValue({}),
+          set: vi.fn(),
+        },
+      },
+    });
+
+    await expect(loadBootstrap()).resolves.toBeTruthy();
+    await vi.waitFor(() => expect(sendMessage).toHaveBeenCalledTimes(1));
+
+    expect(dom.window.document.querySelector(".x-cleaner-fold-card")).toBeNull();
+    expect(dom.window.document.body.textContent).toContain("Hello from the timeline!");
   });
 });

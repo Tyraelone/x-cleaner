@@ -100,4 +100,4 @@ npm run build
 
 ## Status
 
-`v0.1.8` folds every blocked match by default, gives expanded content a manual "Fold again" control, and refreshes the collapsed card UI so filtered items are easier to understand at a glance.
+`v0.1.9` stops folded cards from echoing AI-matched text back to the page and safely degrades when an extension hot-reload invalidates the content script context.

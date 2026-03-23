@@ -135,6 +135,24 @@ describe("getSettings", () => {
     expect(settings.categories.spam).toBe(true);
     expect(settings.debug).toBe(false);
   });
+
+  it("returns defaults when reading sync storage throws synchronously", async () => {
+    const chromeLike = {};
+
+    Object.defineProperty(chromeLike, "storage", {
+      get() {
+        throw new Error("Extension context invalidated.");
+      },
+    });
+
+    vi.stubGlobal("chrome", chromeLike);
+
+    const settings = await getSettings();
+
+    expect(settings.ai.enabled).toBe(false);
+    expect(settings.categories.spam).toBe(true);
+    expect(settings.debug).toBe(false);
+  });
 });
 
 describe("saveSettings", () => {

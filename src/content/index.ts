@@ -9,7 +9,13 @@ import {
   REQUEST_AI_CLASSIFICATION,
   type RawAiClassificationResultMessage,
 } from "../shared/messages";
-import type { CandidateContent, FilterCategory, Settings } from "../shared/types";
+import type {
+  CandidateContent,
+  ClassificationDecision,
+  ClassificationSource,
+  FilterCategory,
+  Settings,
+} from "../shared/types";
 
 type RootNode = ParentNode & {
   querySelectorAll(selectors: string): NodeListOf<Element>;
@@ -141,16 +147,31 @@ function getCategoryTitle(category: FilterCategory): string {
   return `Filtered ${category}`;
 }
 
-function getDecisionReason(
-  category: FilterCategory,
-  source: "local" | "ai",
-  matchedText?: string,
-): string {
-  if (matchedText) {
-    return `${source} match: ${matchedText}`;
+function getCollapseTitle(decision: ClassificationDecision): string {
+  if (decision.source === "blacklist") {
+    return "Filtered account";
   }
 
-  return `${source} match: ${category}`;
+  return getCategoryTitle(decision.category);
+}
+
+function getDecisionReason(
+  category: FilterCategory | undefined,
+  source: ClassificationSource,
+): string {
+  if (source === "blacklist") {
+    return "Blacklisted account";
+  }
+
+  if (source === "ai") {
+    return "AI review flagged this content";
+  }
+
+  if (category) {
+    return `Matched ${category} filter`;
+  }
+
+  return "Matched a local filter";
 }
 
 async function getActiveSettings(): Promise<Settings> {
@@ -163,48 +184,52 @@ async function requestAiClassification(
   settings: Settings,
 ): Promise<RawAiClassificationResult | null> {
   const debugLog = createDebugLogger("content", settings);
-  const chromeApi = globalThis as typeof globalThis & { chrome?: ChromeRuntimeLike };
-  const sendMessage = chromeApi.chrome?.runtime?.sendMessage;
+  try {
+    const chromeApi = globalThis as typeof globalThis & { chrome?: ChromeRuntimeLike };
+    const sendMessage = chromeApi.chrome?.runtime?.sendMessage;
 
-  if (!sendMessage) {
-    debugLog("send-message-missing", {
-      candidateId: candidate.id,
-    });
-    return null;
-  }
+    if (!sendMessage) {
+      debugLog("send-message-missing", {
+        candidateId: candidate.id,
+      });
+      return null;
+    }
 
-  const requestId = `${candidate.id}:${Date.now()}`;
-  debugLog("send-message", {
-    candidateId: candidate.id,
-    requestId,
-    provider: settings.ai.provider ?? "openai",
-  });
-
-  const response = (await sendMessage({
-    type: REQUEST_AI_CLASSIFICATION,
-    payload: {
-      requestId,
-      candidate,
-      settings,
-    },
-  })) as RawAiClassificationResultMessage | null;
-
-  if (!response || response.type !== RAW_AI_CLASSIFICATION_RESULT) {
-    debugLog("send-message-invalid-response", {
+    const requestId = `${candidate.id}:${Date.now()}`;
+    debugLog("send-message", {
       candidateId: candidate.id,
       requestId,
+      provider: settings.ai.provider ?? "openai",
     });
+
+    const response = (await sendMessage({
+      type: REQUEST_AI_CLASSIFICATION,
+      payload: {
+        requestId,
+        candidate,
+        settings,
+      },
+    })) as RawAiClassificationResultMessage | null;
+
+    if (!response || response.type !== RAW_AI_CLASSIFICATION_RESULT) {
+      debugLog("send-message-invalid-response", {
+        candidateId: candidate.id,
+        requestId,
+      });
+      return null;
+    }
+
+    const { requestId: _requestId, ...result } = response.payload;
+    debugLog("send-message-response", {
+      candidateId: candidate.id,
+      requestId,
+      blocked: result.blocked,
+      confidence: result.confidence,
+    });
+    return result;
+  } catch {
     return null;
   }
-
-  const { requestId: _requestId, ...result } = response.payload;
-  debugLog("send-message-response", {
-    candidateId: candidate.id,
-    requestId,
-    blocked: result.blocked,
-    confidence: result.confidence,
-  });
-  return result;
 }
 
 async function processCandidate(candidate: CandidateContent): Promise<void> {
@@ -237,8 +262,8 @@ async function processCandidate(candidate: CandidateContent): Promise<void> {
   const firstMatch = decision.matches[0];
 
   collapseTrackedCandidate(fingerprint, {
-    title: getCategoryTitle(decision.category),
-    reason: getDecisionReason(decision.category, decision.source, firstMatch?.matchedText),
+    title: getCollapseTitle(decision),
+    reason: getDecisionReason(firstMatch?.category, decision.source),
   });
 
   debugLog("candidate-collapsed", {
