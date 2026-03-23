@@ -233,6 +233,18 @@ function buildStructuredClassificationRequest(
   model: string,
   text: string,
 ): StructuredClassificationRequest {
+  const systemPrompt = [
+    "Return only strict JSON for a content classification result with keys blocked, category, confidence, and matches.",
+    "blocked must be a boolean.",
+    "category must be one of hate, harassment, sexual, violence, or spam when blocked is true.",
+    "confidence must be a number from 0 to 1.",
+    "matches must be an array of rule matches with category and matchedText.",
+    "Treat praise, justification, or celebration of military domination, warlike coercion, or violent national superiority as blocked content.",
+    "Treat national taunting or humiliation that glorifies overpowering another country or people as blocked content, usually in violence or hate depending on emphasis.",
+    "Treat glorification of ignorance or contempt for learning, knowledge, expertise, or rational thought as blocked anti-intellectual content.",
+    "Treat statements that celebrate being uninformed, mock education or reasoning, or frame ignorance as a virtue as blocked content, usually in harassment or hate depending on target and tone.",
+  ].join(" ");
+
   return {
     model,
     input: [
@@ -241,8 +253,7 @@ function buildStructuredClassificationRequest(
         content: [
           {
             type: "input_text",
-            text:
-              "Return only strict JSON for a content classification result with keys blocked, category, confidence, and matches. blocked must be a boolean. category must be one of hate, harassment, sexual, violence, or spam when blocked is true. confidence must be a number from 0 to 1. matches must be an array of rule matches with category and matchedText.",
+            text: systemPrompt,
           },
         ],
       },

@@ -100,4 +100,4 @@ npm run build
 
 ## Status
 
-`v0.1.9` stops folded cards from echoing AI-matched text back to the page and safely degrades when an extension hot-reload invalidates the content script context.
+`v0.1.10` expands the AI moderation prompt so it more reliably blocks anti-intellectual content and nationalist war-glorification without adding new local keyword rules.

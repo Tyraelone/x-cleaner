@@ -192,6 +192,86 @@ describe("classifyWithProvider", () => {
     expect(JSON.parse(init.body as string)).not.toHaveProperty("response_format");
   });
 
+  it("instructs the model to block nationalist military-taunting content", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue({
+      ok: true,
+      json: vi.fn().mockResolvedValue({
+        output: [
+          {
+            type: "message",
+            role: "assistant",
+            content: [
+              {
+                type: "output_text",
+                text: JSON.stringify({
+                  blocked: false,
+                  confidence: 0.2,
+                  matches: [],
+                }),
+              },
+            ],
+          },
+        ],
+      }),
+    });
+
+    await classifyWithProvider(
+      {
+        enabled: true,
+        model: "gpt-4o-mini",
+      } as any,
+      "有些国家就是飞机大炮轰天下，而且嘴炮国天天都有傻子在嘲笑飞机大炮国",
+      fetchImpl,
+    );
+
+    const [, init] = fetchImpl.mock.calls[0];
+    const body = JSON.parse(init.body as string);
+    const systemPrompt = body.input[0].content[0].text as string;
+
+    expect(systemPrompt).toContain("Treat praise, justification, or celebration of military domination");
+    expect(systemPrompt).toContain("national taunting or humiliation");
+  });
+
+  it("instructs the model to block overt anti-intellectual glorification", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue({
+      ok: true,
+      json: vi.fn().mockResolvedValue({
+        output: [
+          {
+            type: "message",
+            role: "assistant",
+            content: [
+              {
+                type: "output_text",
+                text: JSON.stringify({
+                  blocked: false,
+                  confidence: 0.2,
+                  matches: [],
+                }),
+              },
+            ],
+          },
+        ],
+      }),
+    });
+
+    await classifyWithProvider(
+      {
+        enabled: true,
+        model: "gpt-4o-mini",
+      } as any,
+      "读书有什么用，越无知越厉害，理性思考都是装的",
+      fetchImpl,
+    );
+
+    const [, init] = fetchImpl.mock.calls[0];
+    const body = JSON.parse(init.body as string);
+    const systemPrompt = body.input[0].content[0].text as string;
+
+    expect(systemPrompt).toContain("Treat glorification of ignorance or contempt for learning");
+    expect(systemPrompt).toContain("anti-intellectual");
+  });
+
   it("falls back to a non-blocking result when fetch fails", async () => {
     const fetchImpl = vi.fn().mockRejectedValue(new Error("network down"));
 
