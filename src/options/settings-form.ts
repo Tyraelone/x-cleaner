@@ -104,6 +104,7 @@ function cloneSnapshot(snapshot: SettingsSnapshot): SettingsSnapshot {
       ...snapshot.ai,
     },
     confidenceThreshold: snapshot.confidenceThreshold,
+    debug: snapshot.debug,
     categories: {
       ...snapshot.categories,
     },
@@ -181,12 +182,18 @@ export function renderSettingsForm(
 
   const modelInput = createTextInput("ai-model", savedSnapshot.ai.model ?? "");
   const apiKeyInput = createTextInput("api-key", savedSnapshot.apiKey, "password");
+  const debugInput = createCheckbox("debug-enabled", savedSnapshot.debug);
+  const debugRow = document.createElement("label");
+  debugRow.className = "checkbox-row";
+  debugRow.setAttribute("for", "debug-enabled");
+  debugRow.append(debugInput, document.createTextNode("Debug logging"));
 
   aiSection.append(
     aiEnabledRow,
     createField("Provider", providerSelect),
     createField("Model", modelInput),
     createField("API key", apiKeyInput),
+    debugRow,
   );
 
   const actions = document.createElement("div");
@@ -214,6 +221,7 @@ export function renderSettingsForm(
     providerSelect.value = snapshot.ai.provider ?? "openai";
     modelInput.value = snapshot.ai.model ?? "";
     apiKeyInput.value = snapshot.apiKey;
+    debugInput.checked = snapshot.debug;
   }
 
   resetButton.addEventListener("click", () => {
@@ -230,6 +238,7 @@ export function renderSettingsForm(
         model: modelInput.value.trim() || undefined,
       },
       confidenceThreshold: initialSettings.confidenceThreshold,
+      debug: debugInput.checked,
       categories: {
         hate: categoryCheckboxes.get("hate")?.checked ?? initialSettings.categories.hate,
         harassment:

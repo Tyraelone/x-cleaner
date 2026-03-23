@@ -28,6 +28,7 @@ export interface AiConfig {
 export interface Settings {
   ai: AiConfig;
   confidenceThreshold: number;
+  debug: boolean;
   categories: Record<FilterCategory, boolean>;
   allowlist: string[];
   blacklist: string[];
@@ -37,6 +38,7 @@ export interface Settings {
 export type SettingsPatch = {
   ai?: Partial<AiConfig>;
   confidenceThreshold?: number;
+  debug?: boolean;
   categories?: Partial<Record<FilterCategory, boolean>>;
   allowlist?: string[];
   blacklist?: string[];

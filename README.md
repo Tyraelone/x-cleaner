@@ -100,4 +100,4 @@ npm run build
 
 ## Status
 
-`v0.1.4` fixes the packaged content-script loading issue by emitting single-file ASCII-safe extension scripts that Chrome can load reliably.
+`v0.1.5` adds a user-facing debug logging toggle and end-to-end content/background diagnostics for local rules, AI requests, and collapse decisions.

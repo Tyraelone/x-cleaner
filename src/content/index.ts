@@ -1,6 +1,7 @@
 import { extractCandidatesFromRoot, isCandidateContainer } from "./selectors";
 import { collapseElement } from "./render";
 import { classifyCandidate, type RawAiClassificationResult } from "../shared/classifier";
+import { createDebugLogger } from "../shared/debug";
 import { getSettings } from "../shared/storage";
 import { fingerprintText } from "../shared/text";
 import {
@@ -161,35 +162,74 @@ async function requestAiClassification(
   candidate: CandidateContent,
   settings: Settings,
 ): Promise<RawAiClassificationResult | null> {
+  const debugLog = createDebugLogger("content", settings);
   const chromeApi = globalThis as typeof globalThis & { chrome?: ChromeRuntimeLike };
   const sendMessage = chromeApi.chrome?.runtime?.sendMessage;
 
   if (!sendMessage) {
+    debugLog("send-message-missing", {
+      candidateId: candidate.id,
+    });
     return null;
   }
+
+  const requestId = `${candidate.id}:${Date.now()}`;
+  debugLog("send-message", {
+    candidateId: candidate.id,
+    requestId,
+    provider: settings.ai.provider ?? "openai",
+  });
 
   const response = (await sendMessage({
     type: REQUEST_AI_CLASSIFICATION,
     payload: {
-      requestId: `${candidate.id}:${Date.now()}`,
+      requestId,
       candidate,
       settings,
     },
   })) as RawAiClassificationResultMessage | null;
 
   if (!response || response.type !== RAW_AI_CLASSIFICATION_RESULT) {
+    debugLog("send-message-invalid-response", {
+      candidateId: candidate.id,
+      requestId,
+    });
     return null;
   }
 
   const { requestId: _requestId, ...result } = response.payload;
+  debugLog("send-message-response", {
+    candidateId: candidate.id,
+    requestId,
+    blocked: result.blocked,
+    confidence: result.confidence,
+  });
   return result;
 }
 
 async function processCandidate(candidate: CandidateContent): Promise<void> {
   const settings = await getActiveSettings();
+  const debugLog = createDebugLogger("content", settings);
+  debugLog("candidate-seen", {
+    candidateId: candidate.id,
+    fingerprint: fingerprintCandidate(candidate),
+    textLength: candidate.text.length,
+  });
   const decision = await classifyCandidate(candidate, settings, requestAiClassification);
 
+  debugLog("candidate-decision", {
+    candidateId: candidate.id,
+    blocked: decision.blocked,
+    source: decision.source,
+    confidence: decision.confidence,
+    category: "category" in decision ? decision.category : undefined,
+  });
+
   if (!decision.blocked || decision.source === "allowlist" || decision.source === "blacklist") {
+    debugLog("candidate-skipped-collapse", {
+      candidateId: candidate.id,
+      source: decision.source,
+    });
     return;
   }
 
@@ -199,6 +239,13 @@ async function processCandidate(candidate: CandidateContent): Promise<void> {
   collapseTrackedCandidate(fingerprint, {
     title: getCategoryTitle(decision.category),
     reason: getDecisionReason(decision.category, decision.source, firstMatch?.matchedText),
+  });
+
+  debugLog("candidate-collapsed", {
+    candidateId: candidate.id,
+    source: decision.source,
+    category: decision.category,
+    matchedText: firstMatch?.matchedText,
   });
 }
 

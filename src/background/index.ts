@@ -1,4 +1,5 @@
 import { classifyWithProvider } from "./ai";
+import { createDebugLogger } from "../shared/debug";
 import { getApiKey, getSettings } from "../shared/storage";
 import {
   RAW_AI_CLASSIFICATION_RESULT,
@@ -80,13 +81,25 @@ async function handleAiClassification(
   message: AiClassificationRequestMessage,
 ): Promise<RawAiClassificationResultMessage> {
   const settings = message.payload.settings ?? (await getSettings());
+  const debugLog = createDebugLogger("background", settings);
   const provider = getAiProvider(settings.ai.provider);
   const needsApiKey = settings.ai.enabled && provider !== "mock";
+
+  debugLog("message-received", {
+    requestId: message.payload.requestId,
+    provider,
+    aiEnabled: settings.ai.enabled,
+    textLength: message.payload.candidate.text.length,
+  });
 
   if (needsApiKey) {
     const apiKey = await getApiKey();
 
     if (!apiKey) {
+      debugLog("api-key-missing", {
+        requestId: message.payload.requestId,
+        provider,
+      });
       return createAllowResponse(message.payload.requestId);
     }
 
@@ -94,7 +107,14 @@ async function handleAiClassification(
       settings.ai,
       message.payload.candidate.text,
       createAuthorizedFetch(apiKey, fetch),
+      debugLog,
     );
+
+    debugLog("message-completed", {
+      requestId: message.payload.requestId,
+      blocked: result.blocked,
+      confidence: result.confidence,
+    });
 
     return {
       type: RAW_AI_CLASSIFICATION_RESULT,
@@ -109,7 +129,14 @@ async function handleAiClassification(
     settings.ai,
     message.payload.candidate.text,
     fetch,
+    debugLog,
   );
+
+  debugLog("message-completed", {
+    requestId: message.payload.requestId,
+    blocked: result.blocked,
+    confidence: result.confidence,
+  });
 
   return {
     type: RAW_AI_CLASSIFICATION_RESULT,

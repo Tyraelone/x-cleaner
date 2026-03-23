@@ -71,6 +71,10 @@ function sanitizeSettingsPatch(value: unknown): SettingsPatch {
     patch.confidenceThreshold = value.confidenceThreshold;
   }
 
+  if (typeof value.debug === "boolean") {
+    patch.debug = value.debug;
+  }
+
   if (isRecord(value.categories)) {
     const categories: NonNullable<SettingsPatch["categories"]> = {};
 
@@ -109,6 +113,7 @@ function mergeSettings(base: Settings, patch: SettingsPatch): Settings {
       ...(patch.ai ?? {}),
     },
     confidenceThreshold: patch.confidenceThreshold ?? base.confidenceThreshold,
+    debug: patch.debug ?? base.debug,
     categories: {
       ...base.categories,
       ...(patch.categories ?? {}),
@@ -134,6 +139,7 @@ export function mergeWithDefaults(partialSettings: unknown = {}): Settings {
     },
     confidenceThreshold:
       sanitizedPatch.confidenceThreshold ?? defaults.confidenceThreshold,
+    debug: sanitizedPatch.debug ?? defaults.debug,
     categories: {
       ...defaults.categories,
       ...(sanitizedPatch.categories ?? {}),

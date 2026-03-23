@@ -21,6 +21,7 @@ describe("renderSettingsForm", () => {
     expect(getByLabelText(document.body, "Provider")).toBeTruthy();
     expect(getByLabelText(document.body, "Model")).toBeTruthy();
     expect(getByLabelText(document.body, "API key")).toBeTruthy();
+    expect(getByLabelText(document.body, "Debug logging")).toBeTruthy();
     expect(getByText(document.body, "Volcengine Ark")).toBeTruthy();
   });
 
@@ -62,6 +63,7 @@ describe("renderSettingsForm", () => {
           model: "gpt-4o-mini",
         },
         confidenceThreshold: 0.8,
+        debug: false,
         categories: {
           hate: false,
           harassment: true,
@@ -121,6 +123,26 @@ describe("renderSettingsForm", () => {
             provider: "ark",
             model: "doubao-seed-1-6-250615",
           },
+        }),
+      }),
+    );
+  });
+
+  it("saves the debug logging toggle", () => {
+    document.body.innerHTML = '<div id="app"></div>';
+    const onSave = vi.fn();
+
+    renderSettingsForm(document.getElementById("app")!, createDefaultSettings(), {
+      onSave,
+    });
+
+    fireEvent.click(getByLabelText(document.body, "Debug logging"));
+    fireEvent.click(getByRole(document.body, "button", { name: "Save settings" }));
+
+    expect(onSave).toHaveBeenCalledWith(
+      expect.objectContaining({
+        settings: expect.objectContaining({
+          debug: true,
         }),
       }),
     );

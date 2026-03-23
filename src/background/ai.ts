@@ -10,6 +10,7 @@ const filterCategories = [
 ] as const satisfies readonly FilterCategory[];
 
 type FetchLike = typeof fetch;
+type DebugLogger = (event: string, payload?: Record<string, unknown>) => void;
 
 type StructuredClassificationRequest = {
   model: string;
@@ -387,8 +388,14 @@ async function runRealProvider(
   model: string,
   text: string,
   fetchImpl: FetchLike,
+  debugLog: DebugLogger,
 ): Promise<RawAiClassificationResult> {
   try {
+    debugLog("provider-request", {
+      provider: "openai",
+      model,
+      textLength: text.length,
+    });
     const response = await fetchImpl("https://api.openai.com/v1/responses", {
       method: "POST",
       headers: {
@@ -398,6 +405,10 @@ async function runRealProvider(
     });
 
     if (!response.ok) {
+      debugLog("provider-response-not-ok", {
+        provider: "openai",
+        ok: response.ok,
+      });
       return createAllowResult();
     }
 
@@ -405,15 +416,31 @@ async function runRealProvider(
     const outputText = extractResponsesOutputText(payload);
 
     if (!outputText) {
+      debugLog("provider-empty-output", {
+        provider: "openai",
+      });
       return createAllowResult();
     }
 
     try {
-      return normalizeProviderOutput(JSON.parse(outputText) as unknown) ?? createAllowResult();
+      const normalized =
+        normalizeProviderOutput(JSON.parse(outputText) as unknown) ?? createAllowResult();
+      debugLog("provider-response", {
+        provider: "openai",
+        blocked: normalized.blocked,
+        confidence: normalized.confidence,
+      });
+      return normalized;
     } catch {
+      debugLog("provider-parse-failed", {
+        provider: "openai",
+      });
       return createAllowResult();
     }
   } catch {
+    debugLog("provider-request-failed", {
+      provider: "openai",
+    });
     return createAllowResult();
   }
 }
@@ -422,8 +449,14 @@ async function runArkProvider(
   model: string,
   text: string,
   fetchImpl: FetchLike,
+  debugLog: DebugLogger,
 ): Promise<RawAiClassificationResult> {
   try {
+    debugLog("provider-request", {
+      provider: "ark",
+      model,
+      textLength: text.length,
+    });
     const response = await fetchImpl(
       "https://operator.las.cn-beijing.volces.com/api/v1/chat/completions",
       {
@@ -436,6 +469,10 @@ async function runArkProvider(
     );
 
     if (!response.ok) {
+      debugLog("provider-response-not-ok", {
+        provider: "ark",
+        ok: response.ok,
+      });
       return createAllowResult();
     }
 
@@ -443,15 +480,31 @@ async function runArkProvider(
     const outputText = extractChatCompletionOutputText(payload);
 
     if (!outputText) {
+      debugLog("provider-empty-output", {
+        provider: "ark",
+      });
       return createAllowResult();
     }
 
     try {
-      return normalizeProviderOutput(JSON.parse(outputText) as unknown) ?? createAllowResult();
+      const normalized =
+        normalizeProviderOutput(JSON.parse(outputText) as unknown) ?? createAllowResult();
+      debugLog("provider-response", {
+        provider: "ark",
+        blocked: normalized.blocked,
+        confidence: normalized.confidence,
+      });
+      return normalized;
     } catch {
+      debugLog("provider-parse-failed", {
+        provider: "ark",
+      });
       return createAllowResult();
     }
   } catch {
+    debugLog("provider-request-failed", {
+      provider: "ark",
+    });
     return createAllowResult();
   }
 }
@@ -460,24 +513,40 @@ export async function classifyWithProvider(
   aiConfig: AiConfig,
   text: string,
   fetchImpl: FetchLike = fetch,
+  debugLog: DebugLogger = () => {},
 ): Promise<RawAiClassificationResult> {
   if (!aiConfig.enabled) {
+    debugLog("provider-skipped-disabled");
     return createAllowResult();
   }
 
   const provider: AiProvider = aiConfig.provider ?? "openai";
 
   if (provider === "mock") {
-    return buildMockProviderResponse(text);
+    const result = buildMockProviderResponse(text);
+    debugLog("provider-response", {
+      provider: "mock",
+      blocked: result.blocked,
+      confidence: result.confidence,
+    });
+    return result;
   }
 
   if (provider === "openai") {
-    return runRealProvider(aiConfig.model ?? "gpt-4o-mini", text, fetchImpl);
+    return runRealProvider(aiConfig.model ?? "gpt-4o-mini", text, fetchImpl, debugLog);
   }
 
   if (provider === "ark") {
-    return runArkProvider(aiConfig.model ?? "doubao-seed-1-6-250615", text, fetchImpl);
+    return runArkProvider(
+      aiConfig.model ?? "doubao-seed-1-6-250615",
+      text,
+      fetchImpl,
+      debugLog,
+    );
   }
 
+  debugLog("provider-unknown", {
+    provider,
+  });
   return createAllowResult();
 }

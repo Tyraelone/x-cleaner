@@ -39,6 +39,7 @@ describe("mergeWithDefaults", () => {
   it("fills missing nested settings with defaults", () => {
     const merged = mergeWithDefaults({ ai: { enabled: true } });
     expect(merged.ai.enabled).toBe(true);
+    expect(merged.debug).toBe(false);
     expect(merged.categories.hate).toBe(true);
   });
 
@@ -54,6 +55,7 @@ describe("mergeWithDefaults", () => {
 
     expect(merged.ai.enabled).toBe(false);
     expect(merged.confidenceThreshold).toBe(0.8);
+    expect(merged.debug).toBe(false);
     expect(merged.categories.hate).toBe(true);
     expect(merged.allowlist).toEqual([]);
     expect(merged.blacklist).toEqual([]);
@@ -71,6 +73,7 @@ describe("getSettings", () => {
 
     const settings = await getSettings();
     expect(settings.ai.enabled).toBe(false);
+    expect(settings.debug).toBe(false);
   });
 
   it("merges nested categories from persisted values", async () => {
@@ -91,6 +94,7 @@ describe("getSettings", () => {
 
     expect(settings.categories.hate).toBe(false);
     expect(settings.categories.spam).toBe(true);
+    expect(settings.debug).toBe(false);
   });
 
   it("falls back safely for malformed sync payloads", async () => {
@@ -104,6 +108,7 @@ describe("getSettings", () => {
             categories: {
               hate: "nope",
             },
+            debug: "nope",
             allowlist: ["ok", 1],
             blacklist: null,
             customKeywords: {},
@@ -116,6 +121,7 @@ describe("getSettings", () => {
 
     expect(settings.ai.enabled).toBe(false);
     expect(settings.confidenceThreshold).toBe(0.8);
+    expect(settings.debug).toBe(false);
     expect(settings.categories.hate).toBe(true);
     expect(settings.allowlist).toEqual([]);
     expect(settings.blacklist).toEqual([]);
@@ -127,6 +133,7 @@ describe("getSettings", () => {
 
     expect(settings.ai.enabled).toBe(false);
     expect(settings.categories.spam).toBe(true);
+    expect(settings.debug).toBe(false);
   });
 });
 
@@ -142,6 +149,7 @@ describe("saveSettings", () => {
         model: "gpt-4o-mini",
       },
       confidenceThreshold: 0.65,
+      debug: false,
       categories: {
         hate: false,
         harassment: true,
@@ -175,6 +183,7 @@ describe("saveSettings", () => {
           model: "gpt-4o-mini",
         },
         confidenceThreshold: 0.65,
+        debug: false,
         categories: {
           hate: true,
           harassment: true,
@@ -196,6 +205,7 @@ describe("saveSettings", () => {
         model: "gpt-4o-mini",
       },
       confidenceThreshold: 0.65,
+      debug: false,
       categories: {
         hate: false,
         harassment: true,
@@ -220,6 +230,7 @@ describe("saveSettings", () => {
     await saveSettings({
       allowlist: "bad" as unknown as string[],
       ai: "oops" as unknown as never,
+      debug: "oops" as unknown as boolean,
       confidenceThreshold: Number.NaN,
     });
 
@@ -252,6 +263,28 @@ describe("saveSettings", () => {
           provider: "ark",
           model: "doubao-seed-1-6-250615",
         }),
+      }),
+    });
+  });
+
+  it("persists the debug setting when saving a patch", async () => {
+    const set = vi.fn().mockResolvedValue(undefined);
+
+    vi.stubGlobal(
+      "chrome",
+      createChromeStorageMock({
+        syncGet: vi.fn().mockResolvedValue({ settings: {} }),
+        syncSet: set,
+      }),
+    );
+
+    await saveSettings({
+      debug: true,
+    });
+
+    expect(set).toHaveBeenCalledWith({
+      settings: expect.objectContaining({
+        debug: true,
       }),
     });
   });
