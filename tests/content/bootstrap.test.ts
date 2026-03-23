@@ -285,4 +285,38 @@ describe("content bootstrap", () => {
     expect(dom.window.document.querySelector("button")).toBeTruthy();
     expect(dom.window.document.body.textContent).toContain("Filtered spam");
   });
+
+  it("collapses blacklisted content through the bootstrap classification flow", async () => {
+    const dom = createDom(fixture("timeline-tweet"));
+
+    vi.stubGlobal("document", dom.window.document);
+    vi.stubGlobal("MutationObserver", FakeMutationObserver as unknown as typeof MutationObserver);
+    vi.stubGlobal("chrome", {
+      runtime: {
+        sendMessage: vi.fn(),
+      },
+      storage: {
+        sync: {
+          get: vi.fn().mockResolvedValue({
+            settings: {
+              ai: {
+                enabled: false,
+              },
+              blacklist: ["alice"],
+            },
+          }),
+          set: vi.fn(),
+        },
+        local: {
+          get: vi.fn().mockResolvedValue({}),
+          set: vi.fn(),
+        },
+      },
+    });
+
+    await loadBootstrap();
+
+    expect(dom.window.document.querySelector("button")).toBeTruthy();
+    expect(dom.window.document.body.textContent).toContain("Expand to review");
+  });
 });

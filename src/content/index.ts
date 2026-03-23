@@ -225,7 +225,7 @@ async function processCandidate(candidate: CandidateContent): Promise<void> {
     category: "category" in decision ? decision.category : undefined,
   });
 
-  if (!decision.blocked || decision.source === "allowlist" || decision.source === "blacklist") {
+  if (!decision.blocked || decision.source === "allowlist") {
     debugLog("candidate-skipped-collapse", {
       candidateId: candidate.id,
       source: decision.source,

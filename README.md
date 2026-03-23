@@ -100,4 +100,4 @@ npm run build
 
 ## Status
 
-`v0.1.6` makes AI classification run before local rules when AI is enabled, while still falling back to local matching if the model request returns no usable result.
+`v0.1.8` folds every blocked match by default, gives expanded content a manual "Fold again" control, and refreshes the collapsed card UI so filtered items are easier to understand at a glance.

@@ -26,7 +26,7 @@ describe("temporary ignore tracking", () => {
 });
 
 describe("collapseElement", () => {
-  it("replaces the target with an expandable placeholder", () => {
+  it("replaces the target with a styled expandable fold card", () => {
     document.body.innerHTML = `<div id="target"><span>bad content</span></div>`;
     const target = document.getElementById("target") as HTMLElement;
 
@@ -36,8 +36,13 @@ describe("collapseElement", () => {
       reason: "keyword match",
     });
 
+    const trigger = document.querySelector("button");
+
+    expect(trigger).not.toBeNull();
+    expect(trigger?.className).toContain("x-cleaner-fold-card");
     expect(document.body.textContent).toContain("Filtered post");
-    expect(document.body.textContent).toContain("click to expand");
+    expect(document.body.textContent).toContain("Expand to review");
+    expect(document.body.textContent).toContain("keyword match");
     expect(document.body.querySelector("#target")).toBeNull();
   });
 
@@ -58,6 +63,7 @@ describe("collapseElement", () => {
 
     expect(document.body.querySelector("#target")).toBe(target);
     expect(document.body.textContent).toContain("bad content");
+    expect(document.body.textContent).toContain("Fold again");
   });
 
   it("does not immediately collapse the same fingerprint again after expand", () => {
@@ -76,6 +82,27 @@ describe("collapseElement", () => {
 
     expect(document.body.querySelector("#target")).toBe(target);
     expect(document.body.textContent).toContain("bad content");
-    expect(document.body.textContent).not.toContain("click to expand");
+    expect(document.body.textContent).not.toContain("Expand to review");
+  });
+
+  it("lets users fold the same content again after expanding it", () => {
+    document.body.innerHTML = `<div id="target"><span>bad content</span></div>`;
+    const target = document.getElementById("target") as HTMLElement;
+    const matchInfo = {
+      fingerprint: "post:4",
+      title: "Filtered post",
+      reason: "keyword match",
+    };
+
+    collapseElement(target, matchInfo);
+    document.querySelector("button")?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+
+    const foldAgain = document.querySelector('[data-action="collapse"]');
+
+    expect(foldAgain).not.toBeNull();
+    foldAgain?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+
+    expect(document.body.querySelector("#target")).toBeNull();
+    expect(document.body.textContent).toContain("Expand to review");
   });
 });
