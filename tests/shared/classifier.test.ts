@@ -131,7 +131,7 @@ describe("classifyCandidate", () => {
     });
   });
 
-  it("only calls AI when local rules are inconclusive and AI is enabled", async () => {
+  it("prefers AI when enabled even if local rules could match", async () => {
     const classifyWithAi = vi.fn().mockResolvedValue({
       blocked: true,
       category: "spam",
@@ -139,7 +139,7 @@ describe("classifyCandidate", () => {
       matches: [],
     });
 
-    const blockedByLocalRules = await classifyCandidate(
+    const blockedByAi = await classifyCandidate(
       {
         id: "post-3",
         type: "post",
@@ -154,20 +154,24 @@ describe("classifyCandidate", () => {
       classifyWithAi,
     );
 
-    expect(blockedByLocalRules).toMatchObject({
+    expect(classifyWithAi).toHaveBeenCalledTimes(1);
+    expect(blockedByAi).toEqual({
       blocked: true,
-      source: "local",
-      category: "harassment",
+      category: "spam",
+      confidence: 0.95,
+      matches: [],
+      source: "ai",
     });
-    expect(classifyWithAi).not.toHaveBeenCalled();
+  });
 
-    classifyWithAi.mockClear();
+  it("falls back to local rules when AI returns null and a local rule matches", async () => {
+    const classifyWithAi = vi.fn().mockResolvedValue(null);
 
-    const aiDecision = await classifyCandidate(
+    const decision = await classifyCandidate(
       {
         id: "post-4",
         type: "post",
-        text: "a totally neutral post",
+        text: "you are an idiot",
       },
       {
         ...defaultSettings,
@@ -179,25 +183,10 @@ describe("classifyCandidate", () => {
     );
 
     expect(classifyWithAi).toHaveBeenCalledTimes(1);
-    expect(classifyWithAi).toHaveBeenCalledWith(
-      {
-        id: "post-4",
-        type: "post",
-        text: "a totally neutral post",
-      },
-      {
-        ...defaultSettings,
-        ai: {
-          enabled: true,
-        },
-      },
-    );
-    expect(aiDecision).toEqual({
+    expect(decision).toMatchObject({
       blocked: true,
-      category: "spam",
-      confidence: 0.95,
-      matches: [],
-      source: "ai",
+      source: "local",
+      category: "harassment",
     });
   });
 

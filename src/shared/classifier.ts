@@ -67,6 +67,48 @@ export async function classifyCandidate(
     };
   }
 
+  if (!settings.ai.enabled) {
+    const localMatch = matchLocalRules(candidate.text, settings);
+
+    if (localMatch) {
+      return {
+        blocked: true,
+        category: localMatch.category,
+        confidence: 1,
+        matches: [localMatch],
+        source: "local",
+      };
+    }
+
+    return {
+      blocked: false,
+      confidence: 0,
+      matches: [],
+      source: "local",
+    };
+  }
+
+  const aiResult = await classifyWithAi(candidate, settings);
+
+  if (aiResult) {
+    if (!aiResult.blocked || aiResult.confidence < settings.confidenceThreshold) {
+      return {
+        blocked: false,
+        confidence: aiResult.confidence,
+        matches: [],
+        source: "ai",
+      };
+    }
+
+    return {
+      blocked: true,
+      category: aiResult.category,
+      confidence: aiResult.confidence,
+      matches: aiResult.matches,
+      source: "ai",
+    };
+  }
+
   const localMatch = matchLocalRules(candidate.text, settings);
 
   if (localMatch) {
@@ -79,40 +121,10 @@ export async function classifyCandidate(
     };
   }
 
-  if (!settings.ai.enabled) {
-    return {
-      blocked: false,
-      confidence: 0,
-      matches: [],
-      source: "local",
-    };
-  }
-
-  const aiResult = await classifyWithAi(candidate, settings);
-
-  if (!aiResult) {
-    return {
-      blocked: false,
-      confidence: 0,
-      matches: [],
-      source: "ai",
-    };
-  }
-
-  if (!aiResult.blocked || aiResult.confidence < settings.confidenceThreshold) {
-    return {
-      blocked: false,
-      confidence: aiResult.confidence,
-      matches: [],
-      source: "ai",
-    };
-  }
-
   return {
-    blocked: true,
-    category: aiResult.category,
-    confidence: aiResult.confidence,
-    matches: aiResult.matches,
+    blocked: false,
+    confidence: 0,
+    matches: [],
     source: "ai",
   };
 }

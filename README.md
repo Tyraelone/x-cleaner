@@ -100,4 +100,4 @@ npm run build
 
 ## Status
 
-`v0.1.5` adds a user-facing debug logging toggle and end-to-end content/background diagnostics for local rules, AI requests, and collapse decisions.
+`v0.1.6` makes AI classification run before local rules when AI is enabled, while still falling back to local matching if the model request returns no usable result.
